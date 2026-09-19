@@ -2,8 +2,8 @@ services:
   - type: web
     name: pinterest-scraper
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m pinterest_scraper.web
+    buildCommand: pip install -e . && pip install -r requirements.txt
+    startCommand: python -m __main__ server
     envVars:
       - key: PYTHON_VERSION
         value: 3.10
