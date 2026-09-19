@@ -148,7 +148,8 @@ async def get_job_events(job_id: str):
             
             if current_count > previous_count:
                 for event in job["events"][previous_count:]:
-                    yield f"data: {str(event).replace(\"'\", '\"')}\n\n"
+                    event_json = str(event).replace("'", '"')
+                    yield f"data: {event_json}\n\n"
                 previous_count = current_count
 
             if job["status"] != JobStatus.RUNNING:
