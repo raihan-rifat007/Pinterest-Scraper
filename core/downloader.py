@@ -1,110 +1,121 @@
-import os
+from __future__ import annotations
+
+import concurrent.futures
+import random
+import re
+import time
 from pathlib import Path
-from typing import List, Dict, Any, Callable, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
+
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+
+from .config import BASE
+from .http import _pick_proxies, browser_headers
 
 
-class FileDownloader:
-    def __init__(self, session: requests.Session, output_dir: str, workers: int = 4):
-        self.session = session
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.workers = min(workers, 16)
-        self.stats = {
-            "downloaded": 0,
-            "skipped": 0,
-            "failed": 0,
-            "total_size": 0,
-        }
+def download_image(
+    session: requests.Session,
+    pin: dict,
+    out_dir: Path,
+    max_retries: int = 3,
+) -> str:
+    time.sleep(random.uniform(0, 0.4))
+    url = pin["image_url"]
+    upgraded = re.sub(r"/(\d+x\d*|\d+x)/", "/originals/", url)
+    candidates = [upgraded, url] if upgraded != url else [url]
 
-    def download_file(self, url: str, filename: str) -> bool:
-        if not url or not filename:
-            return False
+    for existing in out_dir.glob(f"{pin['pin_id']}.*"):
+        if existing.is_file() and existing.stat().st_size > 0:
+            pin["local_file"] = existing.name
+            return "EXISTS"
 
-        filepath = self.output_dir / filename
-
-        if filepath.exists():
-            self.stats["skipped"] += 1
-            return True
-
-        try:
-            response = self.session.get(url, timeout=30, stream=True)
-            response.raise_for_status()
-
-            total_size = int(response.headers.get("content-length", 0))
-
-            with open(filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-
-            self.stats["downloaded"] += 1
-            self.stats["total_size"] += total_size
-            return True
-
-        except Exception as e:
-            print(f"Error downloading {url}: {str(e)}")
-            self.stats["failed"] += 1
-            if filepath.exists():
-                filepath.unlink()
-            return False
-
-    def download_batch(
-        self,
-        items: List[Dict[str, Any]],
-        url_key: str = "image_url",
-        name_key: str = "id",
-        callback: Optional[Callable] = None,
-    ) -> Dict[str, Any]:
-        def download_item(item):
-            url = item.get(url_key)
-            name = item.get(name_key, "")
-            
-            if not url or not name:
-                return False
-
-            ext = self._get_extension(url)
-            filename = f"{name}{ext}"
-            
-            success = self.download_file(url, filename)
-            
-            if callback:
-                callback(item, success)
-            
-            return success
-
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            futures = [executor.submit(download_item, item) for item in items]
-            
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Download task error: {str(e)}")
-
-        return self.stats
-
-    def _get_extension(self, url: str) -> str:
-        try:
-            path = url.split("?")[0]
-            if "." in path:
-                ext = "." + path.split(".")[-1].lower()
-                if ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
-                    return ext
-        except:
-            pass
-        return ".jpg"
+    for url in candidates:
+        ext = Path(urlparse(url).path).suffix.lower() or ".jpg"
+        filename = f"{pin['pin_id']}{ext}"
+        dest = out_dir / filename
+        if dest.exists() and dest.stat().st_size > 0:
+            pin["local_file"] = filename
+            return "EXISTS"
+        for attempt in range(1, max_retries + 1):
+            try:
+                r = session.get(
+                    url, timeout=30, stream=True,
+                    headers={
+                        **browser_headers(referer=f"{BASE}/"),
+                        "Accept": "image/*,*/*;q=0.8",
+                    },
+                    proxies=_pick_proxies(session),
+                )
+                if r.status_code == 200 and r.headers.get(
+                    "Content-Type", "image"
+                ).startswith("image"):
+                    with open(dest, "wb") as f:
+                        for chunk in r.iter_content(65536):
+                            f.write(chunk)
+                    pin["local_file"] = filename
+                    return filename
+            except requests.RequestException:
+                pass
+            time.sleep(1.5 * attempt)
+    return ""
 
 
 def download_all(
     session: requests.Session,
-    pins: List[Dict[str, Any]],
-    output_dir: str = "downloads",
-    workers: int = 4,
-    callback: Optional[Callable] = None,
-) -> Dict[str, Any]:
-    downloader = FileDownloader(session, output_dir, workers)
-    return downloader.download_batch(pins, callback=callback)
+    pins: list[dict],
+    out_dir: Path,
+    workers: int,
+    min_width: int,
+    min_height: int,
+    progress_cb=None,
+) -> dict:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stats = {
+        "downloaded": 0,
+        "skipped_existing": 0,
+        "skipped_small": 0,
+        "skipped_video": 0,
+        "failed": 0,
+    }
+
+    def apply(pin: dict, result: str) -> None:
+        if result == "EXISTS":
+            stats["skipped_existing"] += 1
+        elif result == "SMALL":
+            stats["skipped_small"] += 1
+        elif result == "VIDEO":
+            stats["skipped_video"] += 1
+        elif result:
+            stats["downloaded"] += 1
+            pin["local_file"] = result
+        else:
+            stats["failed"] += 1
+
+    futures = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for pin in pins:
+            if pin["is_video"] and not pin["image_url"]:
+                apply(pin, "VIDEO")
+                if progress_cb:
+                    progress_cb(sum(stats.values()))
+                continue
+            if pin["width"] and (
+                pin["width"] < min_width or pin["height"] < min_height
+            ):
+                apply(pin, "SMALL")
+                if progress_cb:
+                    progress_cb(sum(stats.values()))
+                continue
+            futures[pool.submit(download_image, session, pin, out_dir)] = pin
+
+        for fut in concurrent.futures.as_completed(futures):
+            pin = futures[fut]
+            try:
+                apply(pin, fut.result())
+            except Exception as e:
+                print(f"  pin {pin['pin_id']}: {e}")
+                apply(pin, "")
+            if progress_cb:
+                progress_cb(sum(stats.values()))
+
+    return stats

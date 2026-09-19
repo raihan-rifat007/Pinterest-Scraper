@@ -1,81 +1,127 @@
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from typing import List, Optional
+from __future__ import annotations
+
+import json
 import random
+import re
+import time
+
+import requests
+
+from .config import ACCEPT_LANGS, BASE, REFERERS, USER_AGENTS
 
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-]
+def browser_headers(referer: str | None = None) -> dict:
+    h = {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept-Language": random.choice(ACCEPT_LANGS),
+    }
+    if referer:
+        h["Referer"] = referer
+    elif random.random() < 0.5:
+        h["Referer"] = random.choice(REFERERS)
+    return h
 
 
-class ProxyRotator:
-    def __init__(self, proxy_list: Optional[List[str]] = None):
-        self.proxies = proxy_list or []
-        self.current_index = 0
-
-    def get_next(self) -> Optional[Dict[str, str]]:
-        if not self.proxies:
-            return None
-        
-        proxy = self.proxies[self.current_index]
-        self.current_index = (self.current_index + 1) % len(self.proxies)
-        
-        return {
-            "http": proxy,
-            "https": proxy,
-        }
-
-    def get_random(self) -> Optional[Dict[str, str]]:
-        if not self.proxies:
-            return None
-        
-        proxy = random.choice(self.proxies)
-        return {
-            "http": proxy,
-            "https": proxy,
-        }
+def polite_sleep(base: float, jitter: float = 0.5) -> None:
+    time.sleep(max(0.0, base + random.uniform(0, jitter)))
 
 
-def get_random_user_agent() -> str:
-    return random.choice(USER_AGENTS)
-
-
-def build_session(proxy_pool: Optional[List[str]] = None) -> requests.Session:
-    session = requests.Session()
-    
-    retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        method_whitelist=["HEAD", "GET", "OPTIONS", "POST"],
-        backoff_factor=1
-    )
-    
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    
-    session.headers.update({
-        "User-Agent": get_random_user_agent(),
-        "Accept": "application/json, text/plain, */*",
+def build_session(proxy_pool: list[str] | None = None) -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/json, text/javascript, */*, q=0.01",
         "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Pinterest-AppState": "active",
     })
-    
-    if proxy_pool:
-        rotator = ProxyRotator(proxy_pool)
-        original_request = session.request
-        
-        def request_with_proxy(*args, **kwargs):
-            kwargs["proxies"] = rotator.get_random()
-            return original_request(*args, **kwargs)
-        
-        session.request = request_with_proxy
-    
-    return session
+    s.proxies_pool = proxy_pool or []
+    try:
+        home = s.get(
+            f"{BASE}/", timeout=15,
+            headers=browser_headers(referer="https://www.pinterest.com/"),
+            proxies=_pick_proxies(s),
+        )
+        m = re.search(r'"appVersion":"([^"]+)"', home.text)
+        if m:
+            s.headers["X-APP-VERSION"] = m.group(1)
+    except requests.RequestException:
+        pass
+    return s
+
+
+def _pick_proxies(session: requests.Session) -> dict | None:
+    pool = getattr(session, "proxies_pool", [])
+    if pool:
+        p = random.choice(pool)
+        return {"http": p, "https": p}
+    return None
+
+
+def api_get(
+    session: requests.Session,
+    url: str,
+    params: dict,
+    max_retries: int = 3,
+    headers: dict | None = None,
+    timeout: int = 20,
+) -> dict | None:
+    backoff = 2.0
+    for attempt in range(1, max_retries + 1):
+        merged = {**browser_headers(), **(headers or {})}
+        try:
+            r = session.get(
+                url, params=params, timeout=timeout,
+                headers=merged, proxies=_pick_proxies(session),
+            )
+        except requests.RequestException as e:
+            print(f"  network error: {e}")
+            time.sleep(backoff)
+            backoff *= 2
+            continue
+        if r.status_code == 200:
+            try:
+                return r.json()
+            except ValueError:
+                print("  response is not JSON (possibly blocked)")
+                return None
+        if r.status_code == 429:
+            wait = backoff + random.uniform(2, 5)
+            print(f"  HTTP 429 rate-limited — cooling down {wait:.0f}s")
+            time.sleep(wait)
+            backoff *= 2
+            continue
+        if r.status_code in (401, 403) or r.status_code >= 500:
+            print(f"  HTTP {r.status_code}, retry {attempt}/{max_retries} in {backoff:.0f}s")
+            time.sleep(backoff)
+            backoff *= 2
+            continue
+        print(f"  HTTP {r.status_code} — giving up")
+        return None
+    return None
+
+
+def api_data(
+    session: requests.Session,
+    url: str,
+    options: dict,
+    source_url: str,
+    handler: str = "www/[username].js",
+    referer: str | None = None,
+) -> tuple[object, str | None]:
+    params = {
+        "source_url": source_url,
+        "data": json.dumps({"options": options, "context": {}}),
+    }
+    headers = {
+        "X-Pinterest-PWS-Handler": handler,
+        "Referer": referer or f"{BASE}{source_url}",
+    }
+    payload = api_get(session, url, params, headers=headers)
+    if not payload:
+        return None, None
+    rr = payload.get("resource_response", {})
+    bookmark = rr.get("bookmark") or None
+    if bookmark in ("", "-end-"):
+        bookmark = None
+    return rr.get("data"), bookmark
