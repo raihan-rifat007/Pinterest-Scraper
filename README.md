@@ -41,7 +41,7 @@ docker run -p 8080:8080 pinterest-scraper
 ## Project Structure
 
 ```
-Pinterest-Scrapper/
+Pinterest-Scraper/
 ├── core/                    ← Core scraping logic
 │   ├── scraper.py          (200 lines - Pinterest API wrapper)
 │   ├── http.py             (80 lines - HTTP sessions & proxies)
