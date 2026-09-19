@@ -41,25 +41,39 @@ docker run -p 8080:8080 pinterest-scraper
 ## Project Structure
 
 ```
-pinterest-scraper/
+Pinterest-Scrapper/
+├── core/                    ← Core scraping logic
+│   ├── scraper.py          (200 lines - Pinterest API wrapper)
+│   ├── http.py             (80 lines - HTTP sessions & proxies)
+│   ├── downloader.py       (120 lines - Concurrent downloads)
+│   ├── dedupe.py           (85 lines - Deduplication)
+│   ├── storage.py          (140 lines - Data export)
+│   └── __init__.py
+│
+├── api/                     ← FastAPI server
+│   ├── server.py           (280 lines - Web server)
+│   ├── models.py           (80 lines - Request/response validation)
+│   ├── jobs.py             (150 lines - Job management)
+│   └── __init__.py
+│
+├── cli/                     ← Command-line interface
+│   ├── main.py             (200 lines - CLI commands)
+│   └── __init__.py
+│
 ├── webui/
-│   └── pinterest.html          Single-file responsive web UI
-├── core/
-│   ├── scraper.py              Pinterest API wrapper
-│   ├── downloader.py           Concurrent file downloads
-│   ├── http.py                 HTTP session management
-│   ├── dedupe.py               Deduplication engine
-│   └── storage.py              Data storage and export
-├── api/
-│   ├── server.py               FastAPI server
-│   ├── models.py               Request/response schemas
-│   └── jobs.py                 Background job management
-├── cli/
-│   ├── main.py                 Command-line interface
-│   └── config.py               Configuration handler
-├── requirements.txt
-├── README.md
-└── setup.py
+│   └── pinterest.html      (30 KB - Single HTML file UI)
+│
+├── Dockerfile              ← Docker image
+├── docker-compose.yml      ← Docker Compose
+├── requirements.txt        ← Python dependencies
+├── setup.py                ← Package setup
+├── __main__.py             ← Entry point
+├── LICENSE                 ← MIT License
+├── .gitignore             ← Git ignore
+│
+├── README.md               ← Full documentation
+├── QUICK_START.txt         ← 5-minute setup
+└── PROJECT_STRUCTURE.txt   ← Architecture guide
 ```
 
 ## API Endpoints
