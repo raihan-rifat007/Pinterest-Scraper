@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8080
+    volumes:
+      - ./downloads:/app/downloads
+      - ./storage:/app/storage
+    restart: unless-stopped

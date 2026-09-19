@@ -1,0 +1,125 @@
+PINTEREST SCRAPER - QUICK START GUIDE
+
+PROJECT STRUCTURE:
+==================
+webui/              - Single HTML web interface (pinterest.html)
+core/               - Core scraping logic
+  ├── scraper.py    - Pinterest API wrapper
+  ├── downloader.py - Concurrent downloads
+  ├── http.py       - HTTP session management
+  ├── dedupe.py     - Deduplication
+  └── storage.py    - Data export
+
+api/                - FastAPI server
+  ├── server.py     - Main API server
+  ├── models.py     - Request/response schemas
+  └── jobs.py       - Job management
+
+cli/                - Command-line interface
+  └── main.py       - CLI commands
+
+
+INSTALLATION:
+==============
+pip install -e .
+pip install -r requirements.txt
+
+
+RUN SERVER:
+===========
+python -m __main__ server
+
+Open browser: http://localhost:8080
+
+
+CLI USAGE:
+===========
+Search:
+  python -m cli.main search "nature photography" -l 50
+
+Board:
+  python -m cli.main board "https://pinterest.com/user/board"
+
+Server:
+  python -m cli.main server --port 8080
+
+Export:
+  python -m cli.main export search_nature_photography.json -f xlsx
+
+
+DOCKER:
+========
+Build:
+  docker build -t pinterest-scraper .
+
+Run:
+  docker run -p 8080:8080 pinterest-scraper
+
+Docker Compose:
+  docker-compose up
+
+
+API ENDPOINTS:
+===============
+POST /api/scrape          - Start scraping job
+GET  /api/jobs/{id}/events - Live progress (SSE)
+GET  /api/jobs/{id}/result - Get results
+POST /api/jobs/{id}/cancel - Cancel job
+GET  /api/health           - Health check
+
+
+KEY FILES:
+===========
+webui/pinterest.html  - Single-file responsive UI (all HTML+CSS+JS)
+core/scraper.py       - Main Pinterest scraper logic
+api/server.py         - FastAPI server
+README.md             - Detailed documentation
+
+
+FEATURES:
+==========
+- Modern web UI (dark mode, responsive)
+- Real-time progress tracking
+- Concurrent downloads
+- Deduplication support
+- ZIP and XLSX export
+- Proxy rotation
+- REST API
+- Docker support
+
+
+DEPLOYMENT:
+============
+Render:
+  1. Push to GitHub
+  2. Create Web Service on Render
+  3. Build: pip install -e . && pip install -r requirements.txt
+  4. Start: python -m __main__ server
+  5. Set PORT=8080 env var
+
+Docker:
+  docker-compose up
+
+Local:
+  python -m __main__ server
+
+
+TROUBLESHOOTING:
+=================
+No UI:
+  - Check webui/pinterest.html exists
+  - Verify static files path
+
+API errors:
+  - Check server is running
+  - Verify PORT environment variable
+  - Check logs for errors
+
+Import errors:
+  - Ensure all dependencies installed: pip install -r requirements.txt
+  - Reinstall package: pip install -e .
+
+
+DOCUMENTATION:
+================
+See README.md for complete documentation and API reference.
