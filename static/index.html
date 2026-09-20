@@ -2,11 +2,36 @@
 <html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Scrape Pinterest pins with high-quality images and full metadata.">
-<meta property="og:title" content="Pinterest Scraper">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#E60023">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<meta name="description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
+
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Pinterest Scraper">
+<meta property="og:title" content="Pinterest Scraper — High-quality pin collection">
+<meta property="og:description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
+<meta property="og:url" content="/">
+<meta property="og:image" content="/static/og-image.png">
+<meta property="og:image:secure_url" content="/static/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Pinterest Scraper">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@pinterest">
+<meta name="twitter:title" content="Pinterest Scraper — High-quality pin collection">
+<meta name="twitter:description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
+<meta name="twitter:image" content="/static/og-image.png">
+<meta name="twitter:image:alt" content="Pinterest Scraper">
+
 <title>Pinterest Scraper</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -21,44 +46,43 @@
   <a class="logo" href="/" aria-label="Home">
     <span class="logo-badge"><i class="bi bi-pinterest"></i></span>
     <span class="logo-name">Scraper</span>
-    <span class="logo-tag">v1.3</span>
+    <span class="logo-tag">v1.4</span>
   </a>
 
-  <button id="search-trigger" class="search-trigger" type="button">
+  <form id="search-form" class="search-box" autocomplete="off">
     <i class="bi bi-search"></i>
-    <span class="search-text">Search pins, boards, or ideas...</span>
-    <span class="kbd">⌘K</span>
-  </button>
+    <input id="search-input" type="text" placeholder="Search pins, boards, or ideas..." autocomplete="off" spellcheck="false">
+    <button type="button" id="search-clear" class="search-clear" aria-label="Clear">
+      <i class="bi bi-x-lg"></i>
+    </button>
+    <span class="kbd-hint" id="search-kbd">⌘K</span>
+    <ul id="suggest-list" class="suggest-list"></ul>
+  </form>
 
   <div class="topbar-actions">
-    <button id="shortcuts-btn" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Shortcuts">
+    <button id="shortcuts-btn" class="icon-btn" title="Keyboard shortcuts" aria-label="Shortcuts">
       <i class="bi bi-question-circle"></i>
     </button>
     <button id="theme-btn" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
       <i id="theme-icon" class="bi bi-moon-stars"></i>
     </button>
-    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
-      <i class="bi bi-sliders2"></i>
+    <button id="settings-btn" class="icon-btn settings-btn" title="Settings" aria-label="Settings">
+      <i class="bi bi-gear-fill"></i>
+      <span id="status-dot" class="status-dot" title="Server status"></span>
     </button>
   </div>
-
-  <form id="search-form" hidden>
-    <input id="search-input" type="text" autocomplete="off">
-    <ul id="suggest-list" class="suggest-list"></ul>
-  </form>
 </header>
 
 <main>
   <div id="recent-row" class="hero-suggestions hidden" style="margin-bottom: 24px;"></div>
 
   <section id="hero" class="hero">
-    <div class="hero-eyebrow">
+    <div class="hero-eyebrow" id="hero-eyebrow">
       <span class="dot"></span>
-      <span>Live · Pinterest Scraper</span>
+      <span id="hero-status">Checking status…</span>
     </div>
     <h1>Discover. Scrape. <span class="accent">Create.</span></h1>
     <p>High-quality Pinterest pins with full metadata, batch download, and one-click export to XLSX or ZIP.</p>
-    <div id="hero-suggestions" class="hero-suggestions"></div>
   </section>
 
   <div class="toolbar">
@@ -82,16 +106,10 @@
         <i class="bi bi-sort-down"></i>
         <span>Newest</span>
       </button>
-      <div class="density-toggle" id="density-toggle">
-        <button data-density="comfortable" title="Comfortable">
-          <i class="bi bi-grid-3x3"></i>
-        </button>
-        <button data-density="default" class="active" title="Default">
-          <i class="bi bi-grid"></i>
-        </button>
-        <button data-density="compact" title="Compact">
-          <i class="bi bi-grid-3x3-gap"></i>
-        </button>
+      <div class="density-toggle" id="density-toggle" role="group" aria-label="Density">
+        <button type="button" data-density="comfortable" title="Comfortable" aria-label="Comfortable"><i class="bi bi-grid-3x3"></i></button>
+        <button type="button" data-density="default" title="Default" aria-label="Default"><i class="bi bi-grid"></i></button>
+        <button type="button" data-density="compact" title="Compact" aria-label="Compact"><i class="bi bi-grid-3x3-gap"></i></button>
       </div>
     </div>
   </div>
@@ -144,8 +162,6 @@
     <h2 id="empty-title">Find your inspiration</h2>
     <p id="empty-text">Search for anything and scrape high-quality images with full metadata.</p>
   </section>
-
-  <section id="error-card" class="hidden"></section>
 </main>
 
 <footer class="footer">
@@ -172,18 +188,13 @@
 </footer>
 
 <div id="pin-modal" class="pin-modal" role="dialog" aria-hidden="true">
-  <button id="pm-prev" class="nav-btn" aria-label="Previous">
-    <i class="bi bi-chevron-left"></i>
-  </button>
+  <button id="pm-prev" class="nav-btn" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
   <div class="pin-modal-box">
     <div class="pm-topbar">
       <div class="pm-top-left">
-        <button id="pm-copy-link" class="icon-btn" title="Copy link">
-          <i class="bi bi-link-45deg"></i>
-        </button>
+        <button id="pm-copy-link" class="icon-btn" title="Copy link" aria-label="Copy link"><i class="bi bi-link-45deg"></i></button>
         <a id="pm-pin-link" class="btn ghost small" target="_blank" rel="noopener">
-          <i class="bi bi-pinterest"></i>
-          <span>Pinterest</span>
+          <i class="bi bi-pinterest"></i><span>Pinterest</span>
           <i class="bi bi-box-arrow-up-right"></i>
         </a>
       </div>
@@ -191,9 +202,7 @@
         <a id="pm-download" class="btn primary small" href="#" download>
           <i class="bi bi-download"></i> Download
         </a>
-        <button id="close-pin-modal" class="icon-btn" aria-label="Close">
-          <i class="bi bi-x-lg"></i>
-        </button>
+        <button id="close-pin-modal" class="icon-btn" aria-label="Close"><i class="bi bi-x-lg"></i></button>
       </div>
     </div>
 
@@ -204,12 +213,10 @@
       </div>
       <div class="pin-modal-info">
         <div id="pm-creator-card" class="pm-creator-card">
-          <div id="pm-creator-avatar" class="pm-creator-avatar">
-            <i class="bi bi-person"></i>
-          </div>
+          <div id="pm-creator-avatar" class="pm-creator-avatar"></div>
           <div class="pm-creator-meta">
-            <span id="pm-creator-name" class="pm-creator-name">Creator</span>
-            <span id="pm-creator-user" class="pm-creator-user">@username</span>
+            <span id="pm-creator-name" class="pm-creator-name"></span>
+            <span id="pm-creator-user" class="pm-creator-user"></span>
           </div>
           <a id="pm-creator-link" class="btn ghost small pm-creator-link" target="_blank" rel="noopener">
             <i class="bi bi-person-badge"></i> Profile
@@ -217,7 +224,7 @@
         </div>
 
         <h2 id="pm-title" class="pm-title"></h2>
-        <p id="pm-desc" class="pm-desc"></p>
+        <p id="pm-desc" class="pm-desc hidden"></p>
 
         <div class="pm-badges-row">
           <div class="pm-badge">
@@ -242,31 +249,23 @@
           <a id="pm-board-name" class="pm-board-link" target="_blank" rel="noopener"></a>
         </div>
 
-        <div class="pm-colors-wrap">
-          <span class="pm-section-label">
-            <i class="bi bi-palette-fill"></i> Palette
-          </span>
+        <div class="pm-colors-wrap hidden">
+          <span class="pm-section-label"><i class="bi bi-palette-fill"></i> Palette</span>
           <div id="pm-colors" class="pm-colors"></div>
         </div>
 
         <div class="pm-actions">
-          <button id="pm-visual" class="btn ghost">
-            <i class="bi bi-stars"></i> More like this
-          </button>
+          <button id="pm-visual" class="btn ghost"><i class="bi bi-stars"></i> More like this</button>
         </div>
       </div>
     </div>
   </div>
-  <button id="pm-next" class="nav-btn" aria-label="Next">
-    <i class="bi bi-chevron-right"></i>
-  </button>
+  <button id="pm-next" class="nav-btn" aria-label="Next"><i class="bi bi-chevron-right"></i></button>
 </div>
 
 <div id="selection-bar" class="selection-bar hidden">
   <span id="sel-count" class="sel-count">0 selected</span>
-  <button id="sel-delete" class="btn primary small">
-    <i class="bi bi-trash3"></i> Delete
-  </button>
+  <button id="sel-delete" class="btn primary small"><i class="bi bi-trash3"></i> Delete</button>
   <button id="sel-cancel" class="btn ghost small">Cancel</button>
 </div>
 
@@ -291,86 +290,48 @@
 
 <aside id="settings-drawer" class="drawer" aria-hidden="true">
   <div class="drawer-head">
-    <h2><i class="bi bi-sliders2"></i> Settings</h2>
-    <button id="close-settings" class="icon-btn" aria-label="Close">
-      <i class="bi bi-x-lg"></i>
-    </button>
+    <h2><i class="bi bi-gear-fill"></i> Settings</h2>
+    <button id="close-settings" class="icon-btn" aria-label="Close"><i class="bi bi-x-lg"></i></button>
   </div>
   <div class="drawer-body">
     <div class="drawer-section">
-      <div class="drawer-section-title">
-        <i class="bi bi-toggles2"></i> Features
-      </div>
+      <div class="drawer-section-title"><i class="bi bi-toggles2"></i> Features</div>
       <div class="toggle-row">
         <label for="opt-download">
           <i class="bi bi-cloud-arrow-down"></i>
-          <span>
-            Download images
-            <span class="row-sub">Save images to disk</span>
-          </span>
+          <span>Download images<span class="row-sub">Save images to disk</span></span>
         </label>
         <input type="checkbox" id="opt-download">
       </div>
       <div class="toggle-row">
         <label for="opt-details">
           <i class="bi bi-info-circle"></i>
-          <span>
-            Fetch pin details
-            <span class="row-sub">Saves, comments, creator</span>
-          </span>
+          <span>Fetch pin details<span class="row-sub">Saves, comments, creator</span></span>
         </label>
         <input type="checkbox" id="opt-details">
       </div>
       <div class="toggle-row">
         <label for="opt-insights">
           <i class="bi bi-bar-chart-line"></i>
-          <span>
-            Show insights chart
-            <span class="row-sub">Top pins by saves</span>
-          </span>
+          <span>Show insights chart<span class="row-sub">Top pins by saves</span></span>
         </label>
         <input type="checkbox" id="opt-insights">
       </div>
     </div>
 
     <div class="drawer-section">
-      <div class="drawer-section-title">
-        <i class="bi bi-rulers"></i> Quality &amp; limits
-      </div>
-      <div class="field">
-        <label>Max pins</label>
-        <input type="number" id="opt-limit" value="25" min="1" max="500">
-      </div>
-      <div class="field">
-        <label>Min image width (px)</label>
-        <input type="number" id="opt-min-width" value="0" min="0">
-      </div>
-      <div class="field">
-        <label>Min image height (px)</label>
-        <input type="number" id="opt-min-height" value="0" min="0">
-      </div>
+      <div class="drawer-section-title"><i class="bi bi-rulers"></i> Quality &amp; limits</div>
+      <div class="field"><label>Max pins</label><input type="number" id="opt-limit" value="25" min="1" max="500"></div>
+      <div class="field"><label>Min image width (px)</label><input type="number" id="opt-min-width" value="0" min="0"></div>
+      <div class="field"><label>Min image height (px)</label><input type="number" id="opt-min-height" value="0" min="0"></div>
     </div>
 
     <div class="drawer-section">
-      <div class="drawer-section-title">
-        <i class="bi bi-speedometer2"></i> Performance
-      </div>
-      <div class="field">
-        <label>Concurrent workers</label>
-        <input type="number" id="opt-workers" value="4" min="1" max="16">
-      </div>
-      <div class="field">
-        <label>Delay between pages (s)</label>
-        <input type="number" id="opt-delay" value="1" min="0" step="0.1">
-      </div>
-      <div class="field">
-        <label>Random jitter (s)</label>
-        <input type="number" id="opt-jitter" value="0.5" min="0" step="0.1">
-      </div>
-      <div class="field">
-        <label>Save every N pins</label>
-        <input type="number" id="opt-batch" value="10" min="1" max="100">
-      </div>
+      <div class="drawer-section-title"><i class="bi bi-speedometer2"></i> Performance</div>
+      <div class="field"><label>Concurrent workers</label><input type="number" id="opt-workers" value="4" min="1" max="16"></div>
+      <div class="field"><label>Delay between pages (s)</label><input type="number" id="opt-delay" value="1" min="0" step="0.1"></div>
+      <div class="field"><label>Random jitter (s)</label><input type="number" id="opt-jitter" value="0.5" min="0" step="0.1"></div>
+      <div class="field"><label>Save every N pins</label><input type="number" id="opt-batch" value="10" min="1" max="100"></div>
     </div>
 
     <button id="reset-settings" class="btn ghost" style="width:100%; justify-content:center; margin-top:8px;">
