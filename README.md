@@ -1,93 +1,197 @@
-# Pinterest Scraper
+<div align="center">
 
-High-performance Pinterest content scraper with modern web interface and REST API.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=E60023&height=200&section=header&text=Pinterest%20Scraper&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=Production-grade%20scraping%20%C2%B7%20Premium%20web%20UI%20%C2%B7%20Full%20metadata&descAlignY=58&descFontSize=16&descFontColor=ffffff" width="100%">
+
+<br>
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://render.com)
+[![License](https://img.shields.io/badge/License-MIT-E60023?style=for-the-badge)](LICENSE)
+
+<br>
+
+**A production-ready Pinterest scraper with a premium black & white web UI.**  
+Search, board-scrape, download, deduplicate, export — all from a single interface.
+
+<br>
+
+[Features](#-features) · [Screenshots](#-screenshots) · [Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Deployment](#-deployment) · [Config](#-configuration)
+
+</div>
+
+---
 
 ## Features
 
-- Keyword search and board scraping
-- High-quality image and video downloads
-- Concurrent download processing
-- Real-time progress tracking
-- Dark mode support
-- ZIP and XLSX export
-- Deduplication support
-- Proxy rotation
-- Professional web UI
+<table>
+<tr>
+<td width="50%">
 
-## Quick Start
+**Core**
+- Search pins by keyword or batch query
+- Board scraping via URL
+- Full metadata extraction (saves, comments, creator, board, colors, dimensions)
+- High-res image upgrade (`/originals/` path injection)
+- Video pin detection + direct MP4 URL extraction
+- Concurrent downloading with configurable workers
 
-### Installation
+</td>
+<td width="50%">
 
-```bash
-pip install -e .
-pip install -r requirements.txt
-```
+**Web UI**
+- Premium masonry grid with lazy-load reveal
+- Live progress via Server-Sent Events (SSE)
+- Video playback inline in pin modal
+- Typeahead search suggestions with user results
+- Dark / light mode with system preference detection
+- Gallery view for all downloaded images
+- Long-press selection mode for batch delete
 
-### Start Server
+</td>
+</tr>
+<tr>
+<td>
 
-```bash
-python -m pinterest_scraper.web
-```
+**Export**
+- ZIP archive of all downloaded images
+- XLSX spreadsheet with full metadata columns
+- JSON + CSV saved automatically per run
 
-Server runs on `http://localhost:8000`
+</td>
+<td>
 
-### Docker
+**Advanced**
+- Deduplication across runs (hash + URL)
+- Scheduled scrapes (cron-style, configurable hours)
+- Visual / related pin search
+- Engagement insights chart (top pins by saves)
+- Proxy pool support
+- Infinite scroll pagination
 
-```bash
-docker build -t pinterest-scraper .
-docker run -p 8080:8080 pinterest-scraper
-```
+</td>
+</tr>
+</table>
+
+---
+
+## Screenshots
+
+> _Add screenshots of your deployed instance here._
+
+| Search View | Pin Modal | Gallery |
+|:-----------:|:---------:|:-------:|
+| `docs/search.png` | `docs/modal.png` | `docs/gallery.png` |
+
+---
 
 ## Project Structure
 
 ```
-Pinterest-Scraper/
-├── core/                    ← Core scraping logic
-│   ├── scraper.py          (200 lines - Pinterest API wrapper)
-│   ├── http.py             (80 lines - HTTP sessions & proxies)
-│   ├── downloader.py       (120 lines - Concurrent downloads)
-│   ├── dedupe.py           (85 lines - Deduplication)
-│   ├── storage.py          (140 lines - Data export)
-│   └── __init__.py
-│
-├── api/                     ← FastAPI server
-│   ├── server.py           (280 lines - Web server)
-│   ├── models.py           (80 lines - Request/response validation)
-│   ├── jobs.py             (150 lines - Job management)
-│   └── __init__.py
-│
-├── cli/                     ← Command-line interface
-│   ├── main.py             (200 lines - CLI commands)
-│   └── __init__.py
-│
-├── webui/
-│   └── pinterest.html      (30 KB - Single HTML file UI)
-│
-├── Dockerfile              ← Docker image
-├── docker-compose.yml      ← Docker Compose
-├── requirements.txt        ← Python dependencies
-├── setup.py                ← Package setup
-├── __main__.py             ← Entry point
-├── LICENSE                 ← MIT License
-├── .gitignore             ← Git ignore
-│
-├── README.md               ← Full documentation
-├── QUICK_START.txt         ← 5-minute setup
-└── PROJECT_STRUCTURE.txt   ← Architecture guide
+pinterest-scraper/
+├── api/
+│   ├── __init__.py
+│   └── server.py          # FastAPI app — all endpoints + Job runner
+├── core/
+│   ├── __init__.py
+│   ├── config.py          # URLs, user-agents, CSV columns
+│   ├── dedupe.py          # Cross-run deduplication store
+│   ├── downloader.py      # Concurrent image downloader
+│   ├── http.py            # Session builder, retry logic, rate-limit handling
+│   ├── scraper.py         # Pinterest API calls — search, board, related, suggest
+│   └── storage.py         # JSON + CSV persistence
+├── static/
+│   ├── index.html         # Single-page app shell
+│   ├── css/style.css      # Design system — tokens, dark mode, animations
+│   └── js/app.js          # Vanilla JS — no build step required
+├── __main__.py            # Entry point
+├── requirements.txt
+└── render.yaml            # One-click Render deployment
 ```
 
-## API Endpoints
+---
 
-### Start Scrape Job
+## Quick Start
 
-```http
-POST /api/scrape
-Content-Type: application/json
+### Prerequisites
 
+- Python 3.10+
+
+### Local setup
+
+```bash
+git clone https://github.com/your-username/pinterest-scraper
+cd pinterest-scraper
+
+pip install -r requirements.txt
+
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000).
+
+### Docker (optional)
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+EXPOSE 8000
+CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```bash
+docker build -t pinterest-scraper .
+docker run -p 8000:8000 pinterest-scraper
+```
+
+---
+
+## Deployment
+
+### Render (recommended)
+
+The repo ships with `render.yaml` — deploy in one click.
+
+1. Push to GitHub
+2. Go to [render.com](https://render.com) → **New Web Service**
+3. Connect your repo — Render auto-detects `render.yaml`
+4. Click **Deploy**
+
+> **Note:** Render's free tier uses ephemeral storage. Downloaded images are lost on restart. Use a paid plan or mount a persistent disk at `/app/web_output`.
+
+### Manual VPS
+
+```bash
+pip install -r requirements.txt
+uvicorn api.server:app --host 0.0.0.0 --port 80 --workers 1
+```
+
+For production, put Nginx in front and use a systemd service or `supervisor`.
+
+---
+
+## API Reference
+
+All endpoints return JSON unless noted.
+
+### Scrape
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/scrape` | Start a scrape job |
+| `GET` | `/api/jobs/{id}/events` | SSE stream — live progress |
+| `GET` | `/api/jobs/{id}/result` | Final result after job completes |
+| `POST` | `/api/jobs/{id}/cancel` | Cancel a running job |
+
+**POST `/api/scrape` body:**
+
+```json
 {
-  "query": "search term",
+  "query": "dark academia",
   "mode": "search",
-  "limit": 25,
+  "limit": 50,
   "download": true,
   "details": true,
   "dedup": false,
@@ -101,327 +205,165 @@ Content-Type: application/json
 }
 ```
 
-Response:
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `query` | string | — | Search term or board URL. Comma-separate for batch. |
+| `mode` | `search` \| `board` | `search` | Scrape mode |
+| `limit` | int | `25` | Max pins per query (1–500) |
+| `download` | bool | `true` | Download images to disk |
+| `details` | bool | `true` | Fetch full pin details (saves, comments…) |
+| `dedup` | bool | `false` | Skip pins seen in previous runs |
+| `workers` | int | `4` | Concurrent download threads (1–16) |
+| `delay` | float | `1.0` | Seconds between paginated requests |
+| `jitter` | float | `0.5` | Random jitter added to delay |
+| `proxy` | string | `""` | Proxy URL or comma-separated pool |
+
+### Images & Gallery
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/images/{name}` | Serve a downloaded image |
+| `GET` | `/api/gallery` | All downloaded pins with metadata |
+| `GET` | `/api/gallery/export/zip` | ZIP of all gallery images |
+| `POST` | `/api/images/delete` | Delete images by filename |
+
+### Export
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/jobs/{id}/export/zip` | ZIP of job images |
+| `GET` | `/api/jobs/{id}/export/xlsx` | XLSX metadata spreadsheet |
+
+### Suggestions & Visual Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/suggest?q=term` | Typeahead suggestions |
+| `GET` | `/api/visual-search?pin_id=123` | Related pins by ID |
+
+### Schedules
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/schedules` | List all schedules |
+| `POST` | `/api/schedules` | Create a schedule |
+| `DELETE` | `/api/schedules/{id}` | Delete a schedule |
+
+**POST `/api/schedules` body:**
+
 ```json
 {
-  "job_id": "abc123def456"
+  "mode": "search",
+  "query": "wallpaper 4k",
+  "interval_hours": 24,
+  "limit": 50
 }
 ```
 
-### Get Live Progress
+### SSE Events
 
-```http
-GET /api/jobs/{job_id}/events
-```
+The `/api/jobs/{id}/events` stream emits these event types:
 
-Server-Sent Events stream with real-time progress updates.
+| Event | Fields | Description |
+|-------|--------|-------------|
+| `phase` | `phase`, `total`, `message` | Phase started (collect / details / download) |
+| `progress` | `phase`, `count`, `total` | Progress within a phase |
+| `query_start` | `query`, `index`, `total` | Batch query started |
+| `nothing_new` | `total` | All pins already exist |
+| `saved` | `json_file`, `csv_file` | Metadata saved to disk |
+| `done` | `status`, `total`, `stats`, `error` | Job completed |
 
-### Get Job Results
-
-```http
-GET /api/jobs/{job_id}/result
-```
-
-Returns:
-```json
-{
-  "status": "finished",
-  "pins": [
-    {
-      "id": "pin_id",
-      "url": "pinterest_url",
-      "image_url": "download_url",
-      "title": "title",
-      "description": "description",
-      "type": "image"
-    }
-  ],
-  "stats": {
-    "downloaded": 25,
-    "skipped": 0
-  }
-}
-```
-
-### Cancel Job
-
-```http
-POST /api/jobs/{job_id}/cancel
-```
-
-### Health Check
-
-```http
-GET /api/health
-```
+---
 
 ## Configuration
 
-### Environment Variables
+Settings are saved per-browser in `localStorage`. The backend reads all options from the request body — no server-side config file required.
 
-```bash
-PORT=8080
-PYTHONUNBUFFERED=1
+### Output structure
+
+Each scrape writes to `web_output/`:
+
+```
+web_output/
+├── {stem}.json        # Full pin metadata array
+├── {stem}.csv         # Flat CSV with all columns
+├── .seen_pins.json    # Deduplication store (when dedup=true)
+└── images/
+    ├── {pin_id}.jpg
+    ├── {pin_id}.mp4   # (videos not downloaded, URL stored)
+    └── ...
 ```
 
-### Query Parameters
+### Proxy support
 
-- `query` (string, required): Search term or board URL
-- `mode` (string): "search" or "board" (default: "search")
-- `limit` (int): Results limit 1-500 (default: 25)
-- `download` (bool): Download images (default: true)
-- `details` (bool): Fetch metadata (default: true)
-- `dedup` (bool): Remove duplicates (default: false)
-- `workers` (int): Download threads 1-16 (default: 4)
-- `delay` (float): Request delay 0-30 seconds (default: 1.0)
-- `jitter` (float): Random variance 0-10 seconds (default: 0.5)
-- `batch_size` (int): Batch size 1-100 (default: 10)
-- `min_width` (int): Minimum image width (default: 0)
-- `min_height` (int): Minimum image height (default: 0)
-- `proxy` (string): Comma-separated proxy URLs
+Pass a single proxy or comma-separated pool in the `proxy` field:
 
-## Export Formats
-
-### ZIP
-
-Contains all downloaded images with metadata file:
-- images/ folder with all pins
-- metadata.json with pin information
-
-### XLSX
-
-Spreadsheet with columns:
-- ID
-- Title
-- Description
-- URL
-- Download URL
-- Type
-- Width x Height
-- Timestamp
-
-## Module Guide
-
-### core/scraper.py
-
-Main Pinterest scraping logic:
-
-```python
-from core.scraper import search_pins, board_pins
-
-results = search_pins("nature photography", limit=50)
-board_results = board_pins("https://pinterest.com/user/board")
+```
+http://user:pass@host:port
+http://proxy1:port,http://proxy2:port
 ```
 
-### core/downloader.py
-
-Concurrent download handler:
-
-```python
-from core.downloader import download_all
-
-stats = download_all(session, pins, output_dir, workers=4)
-```
-
-### core/http.py
-
-HTTP session builder with proxy support:
-
-```python
-from core.http import build_session
-
-session = build_session(proxy_pool=["http://proxy1:8080"])
-```
-
-### core/dedupe.py
-
-Deduplication storage:
-
-```python
-from core.dedupe import DedupeStore
-
-store = DedupeStore(".seen_pins.json")
-if store.has(pin_id):
-    skip_pin()
-else:
-    process_pin()
-    store.add(pin_id)
-```
-
-### core/storage.py
-
-Data export:
-
-```python
-from core.storage import save_outputs
-
-save_outputs(pins, output_dir, formats=["json", "xlsx"])
-```
-
-## Performance Tips
-
-1. Use appropriate worker count (CPU cores)
-2. Set reasonable delays to avoid rate limiting
-3. Enable deduplication for repeated searches
-4. Filter by dimensions to reduce download time
-5. Use proxy rotation for large batches
-6. Process in smaller batches if memory-constrained
-
-## Rate Limiting
-
-Pinterest enforces rate limits. Respect them:
-
-- Use default delay (1-2 seconds)
-- Rotate proxies for high-volume scraping
-- Monitor response headers
-- Implement exponential backoff
-
-## Troubleshooting
-
-### No Results
-
-- Verify query spelling
-- Try simpler search terms
-- Check internet connection
-- Verify Pinterest is accessible
-
-### Slow Downloads
-
-- Increase worker count
-- Reduce image dimensions
-- Disable metadata fetching
-- Check network bandwidth
-
-### Memory Issues
-
-- Reduce results limit
-- Process in smaller batches
-- Monitor available RAM
-- Increase batch frequency
-
-### API Connection Errors
-
-- Verify server is running
-- Check PORT environment variable
-- Review server logs
-- Test with curl: `curl http://localhost:8080/api/health`
-
-## Deployment
-
-### Render
-
-1. Connect GitHub repository
-2. Create new Web Service
-3. Build: `pip install -e . && pip install -r requirements.txt`
-4. Start: `python -m pinterest_scraper.web`
-5. Set PORT environment variable to 8080
-
-### Docker Compose
-
-```bash
-docker-compose up
-```
-
-### AWS Lambda
-
-Use Zappa for serverless deployment or EC2 for persistent service.
-
-## CLI Usage
-
-```bash
-pinterest-scraper search "nature photography" --limit 50
-pinterest-scraper board "https://pinterest.com/user/board"
-pinterest-scraper download --query "landscape" --workers 8
-```
-
-## Development
-
-### Install Dev Dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-### Run Tests
-
-```bash
-pytest tests/
-```
-
-### Format Code
-
-```bash
-black src/
-isort src/
-```
-
-## Security
-
-- Do not violate Pinterest Terms of Service
-- Respect copyright and intellectual property
-- Use responsible rate limiting
-- Implement proper authentication for production
-- Sanitize user inputs
-- Validate API responses
-
-## Error Handling
-
-- Invalid queries return empty results
-- Rate limiting triggers automatic delays
-- Failed downloads are logged and skipped
-- Interrupted jobs can be resumed
-- Clear error messages in UI
-
-## Browser Support
-
-- Chrome 60+
-- Firefox 55+
-- Safari 12+
-- Edge 79+
-
-## Supported Python Versions
-
-- Python 3.10+
-- Python 3.11
-- Python 3.12
-
-## Dependencies
-
-- fastapi >= 0.100.0
-- uvicorn >= 0.22.0
-- requests >= 2.31.0
-- openpyxl >= 3.1.0
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Version
-
-2.0.0
-
-## Changelog
-
-### 2.0.0
-- Redesigned folder structure
-- Single HTML file web UI
-- Removed Persian language
-- Cleaned all code comments
-- Professional organization
-- Advanced README
-- Production ready
-
-### 1.3.0
-- FastAPI web server
-- Server-Sent Events
-- XLSX export
-- Improved deduplication
-- Proxy rotation
-
-## Support
-
-For issues and questions, open GitHub issues or contact support.
-
-## Disclaimer
-
-This tool is for educational and personal use. Users are responsible for ensuring compliance with Pinterest's Terms of Service and applicable laws. The developers are not liable for misuse.
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.10+, FastAPI, uvicorn |
+| HTTP | `requests` with retry + rate-limit handling |
+| Concurrency | `concurrent.futures.ThreadPoolExecutor` |
+| Export | `openpyxl` (XLSX), `zipfile`, `csv` |
+| Frontend | Vanilla JS (no build step), CSS custom properties |
+| Charts | Chart.js 4 |
+| Deployment | Render, Docker-compatible |
+
+---
+
+## Metadata Fields
+
+Every pin object contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pin_id` | string | Pinterest pin ID |
+| `pin_url` | string | Full Pinterest URL |
+| `title` | string | Pin title |
+| `description` | string | Pin description |
+| `alt_text` | string | Auto-generated alt text |
+| `image_url` | string | Highest-resolution image URL |
+| `width` / `height` | int | Image dimensions in px |
+| `aspect_ratio` | float | width / height |
+| `saves` | int | Total saves |
+| `repin_count` | int | Repin count |
+| `likes` | int | Like count |
+| `comments` | int | Comment count |
+| `creator_username` | string | Pinterest username |
+| `creator_name` | string | Display name |
+| `creator_profile` | string | Profile URL |
+| `board_name` | string | Board name |
+| `board_url` | string | Board URL |
+| `external_link` | string | External link on pin |
+| `domain` | string | External link domain |
+| `dominant_color` | string | Hex color code |
+| `created_at` | string | ISO creation timestamp |
+| `is_video` | bool | True if video pin |
+| `video_url` | string | Direct MP4 URL (if video) |
+| `local_file` | string | Downloaded filename (if saved) |
+
+---
+
+## Legal
+
+This project is for **personal, educational, and research use only**.  
+Respect Pinterest's [Terms of Service](https://policy.pinterest.com/en/terms-of-service) and `robots.txt`.  
+Do not use at scale or for commercial scraping without explicit permission.
+
+---
+
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=E60023&height=100&section=footer" width="100%">
+
+Made with Python and FastAPI · Deployed on Render
+
+</div>
