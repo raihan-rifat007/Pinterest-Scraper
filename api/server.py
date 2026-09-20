@@ -13,8 +13,9 @@ import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.dedupe import DedupeStore
@@ -205,8 +206,284 @@ def _out_dir() -> Path:
     return Path("web_output")
 
 
-app = FastAPI(title="Pinterest Scraper")
+app = FastAPI(
+    title="Pinterest Scraper",
+    version="1.4.0",
+    description=(
+        "High-quality Pinterest scraper API. "
+        "Search pins, boards, or visually similar content — "
+        "with batch download, metadata export, and gallery management."
+    ),
+    docs_url=None,
+    redoc_url=None,
+)
+
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema["info"]["x-logo"] = {"url": "/static/og-image.png"}
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+DOCS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#E60023">
+<meta name="description" content="Pinterest Scraper API — scrape pins with full metadata, batch download, and export.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pinterest Scraper">
+<meta property="og:title" content="Pinterest Scraper — API Reference">
+<meta property="og:description" content="High-quality Pinterest scraper API with job events, exports, and gallery.">
+<meta property="og:image" content="/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pinterest Scraper — API Reference">
+<meta name="twitter:description" content="High-quality Pinterest scraper API with job events, exports, and gallery.">
+<meta name="twitter:image" content="/static/og-image.png">
+<title>Pinterest Scraper · API Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23E60023'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white' font-family='serif' font-weight='bold'>P</text></svg>">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #FCFCFD; font-family: 'Inter', -apple-system, sans-serif; }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 800px 600px at 20% -10%, rgba(230, 0, 35, 0.06), transparent 50%),
+      radial-gradient(ellipse 800px 600px at 100% 0%, rgba(139, 92, 246, 0.05), transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .docs-topbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 24px;
+    background: #FCFCFD;
+    border-bottom: 1px solid rgba(0,0,0,.06);
+  }
+  .docs-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .docs-logo-badge {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #FF1E3D 0%, #E60023 50%, #8B0020 100%);
+    color: #fff; display: grid; place-items: center;
+    font-size: 1.1rem; font-weight: 800;
+    box-shadow: 0 12px 32px rgba(230,0,35,.25), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .docs-logo-name { font-weight: 800; font-size: 1rem; letter-spacing: -0.03em; color: #0A0A0B; }
+  .docs-logo-tag {
+    font-size: .62rem; font-weight: 700;
+    padding: 3px 8px; border-radius: 999px;
+    background: #E60023; color: #fff;
+    letter-spacing: .04em;
+  }
+  .docs-nav { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .docs-nav a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: .84rem; font-weight: 600;
+    text-decoration: none; color: #1F1F23;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,.08);
+    transition: all .15s ease;
+  }
+  .docs-nav a:hover { background: #F1F1F4; border-color: rgba(0,0,0,.12); }
+  .docs-nav a.primary { background: #E60023; color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(230,0,35,.3); }
+  .docs-nav a.primary:hover { background: #C4001E; transform: translateY(-1px); }
+  #swagger-ui { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .swagger-ui .topbar { display: none !important; }
+  .swagger-ui .info { margin: 24px 0 36px; }
+  .swagger-ui .info .title { font-family: 'Inter', sans-serif; font-weight: 800; letter-spacing: -0.03em; font-size: 2rem; color: #0A0A0B; }
+  .swagger-ui .info .title small { background: #E60023; padding: 3px 8px; border-radius: 999px; font-size: .65rem; }
+  .swagger-ui .info .title small pre { background: transparent; }
+  .swagger-ui .info p, .swagger-ui .info li { font-family: 'Inter', sans-serif; color: #6E6E78; }
+  .swagger-ui .scheme-container {
+    background: #fff; box-shadow: none; border: 1px solid rgba(0,0,0,.06);
+    border-radius: 16px; padding: 16px 20px; margin: 0 0 24px;
+  }
+  .swagger-ui .opblock-tag {
+    font-family: 'Inter', sans-serif; font-weight: 700; font-size: 1.1rem;
+    color: #0A0A0B; border-bottom: 1px solid rgba(0,0,0,.06);
+    padding: 16px 10px; margin: 8px 0;
+  }
+  .swagger-ui .opblock-tag:hover { background: #F1F1F4; border-radius: 12px; }
+  .swagger-ui .opblock {
+    border-radius: 14px;
+    border: 1px solid rgba(0,0,0,.06);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    margin: 8px 0;
+    overflow: hidden;
+    background: #fff;
+  }
+  .swagger-ui .opblock .opblock-summary { border-bottom: none; padding: 10px 16px; }
+  .swagger-ui .opblock.opblock-get { background: rgba(59, 130, 246, 0.04); border-color: rgba(59, 130, 246, 0.2); }
+  .swagger-ui .opblock.opblock-get .opblock-summary-method { background: #3B82F6; }
+  .swagger-ui .opblock.opblock-post { background: rgba(16, 185, 129, 0.04); border-color: rgba(16, 185, 129, 0.2); }
+  .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #10B981; }
+  .swagger-ui .opblock.opblock-put { background: rgba(245, 158, 11, 0.04); border-color: rgba(245, 158, 11, 0.2); }
+  .swagger-ui .opblock.opblock-put .opblock-summary-method { background: #F59E0B; }
+  .swagger-ui .opblock.opblock-delete { background: rgba(230, 0, 35, 0.04); border-color: rgba(230, 0, 35, 0.2); }
+  .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #E60023; }
+  .swagger-ui .opblock-summary-method {
+    font-family: 'JetBrains Mono', monospace; font-weight: 700;
+    font-size: .72rem; border-radius: 8px; padding: 6px 12px;
+    min-width: 68px; text-shadow: none;
+  }
+  .swagger-ui .opblock-summary-path {
+    font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: .88rem;
+    color: #0A0A0B;
+  }
+  .swagger-ui .opblock-summary-description { color: #6E6E78; font-size: .86rem; }
+  .swagger-ui .btn {
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    border-radius: 10px; border: 1px solid rgba(0,0,0,.08);
+    box-shadow: none; padding: 8px 16px;
+    transition: all .15s ease;
+  }
+  .swagger-ui .btn.execute {
+    background: #E60023; color: #fff; border-color: transparent;
+    box-shadow: 0 4px 12px rgba(230,0,35,.3);
+  }
+  .swagger-ui .btn.execute:hover { background: #C4001E; }
+  .swagger-ui .btn.authorize { color: #E60023; border-color: #E60023; }
+  .swagger-ui .btn.authorize svg { fill: #E60023; }
+  .swagger-ui .btn.authorize:hover { background: rgba(230, 0, 35, 0.08); }
+  .swagger-ui select, .swagger-ui input[type=text], .swagger-ui input[type=email],
+  .swagger-ui input[type=password], .swagger-ui input[type=search],
+  .swagger-ui textarea {
+    border-radius: 10px; border: 1.5px solid rgba(0,0,0,.1);
+    font-family: 'Inter', sans-serif;
+    padding: 8px 12px; outline: none;
+  }
+  .swagger-ui select:focus, .swagger-ui input:focus, .swagger-ui textarea:focus {
+    border-color: #E60023; box-shadow: 0 0 0 3px rgba(230,0,35,.1);
+  }
+  .swagger-ui .highlight-code, .swagger-ui .microlight {
+    font-family: 'JetBrains Mono', monospace; font-size: .8rem;
+    border-radius: 10px;
+  }
+  .swagger-ui .model-box, .swagger-ui .model-container {
+    background: #F7F7F9; border-radius: 12px; padding: 8px;
+  }
+  .swagger-ui section.models {
+    border: 1px solid rgba(0,0,0,.06); border-radius: 16px; background: #fff;
+    margin-top: 32px;
+  }
+  .swagger-ui section.models h4 {
+    font-family: 'Inter', sans-serif; font-weight: 700;
+    border-bottom: 1px solid rgba(0,0,0,.06); padding: 16px 20px;
+    color: #0A0A0B;
+  }
+  .swagger-ui .responses-inner { padding: 16px 0; }
+  .swagger-ui .response-col_status { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .docs-footer {
+    text-align: center; padding: 32px 24px; color: #6E6E78; font-size: .84rem;
+    position: relative; z-index: 1;
+    border-top: 1px solid rgba(0,0,0,.06);
+    margin-top: 40px;
+  }
+  @media (max-width: 760px) {
+    .docs-topbar { padding: 12px 16px; gap: 10px; flex-wrap: wrap; }
+    .docs-logo-name, .docs-logo-tag { display: none; }
+    .docs-nav { gap: 6px; width: 100%; justify-content: flex-end; }
+    .docs-nav a { padding: 7px 12px; font-size: .78rem; }
+    #swagger-ui { padding: 16px 14px; }
+    .swagger-ui .info .title { font-size: 1.4rem; }
+  }
+  body[data-theme="dark"] { background: #08080A; color: #F7F7F9; }
+  body[data-theme="dark"] .docs-topbar { background: #08080A; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .docs-logo-name { color: #F7F7F9; }
+  body[data-theme="dark"] .docs-nav a { background: #0F0F12; border-color: rgba(255,255,255,.08); color: #E5E5EA; }
+  body[data-theme="dark"] .swagger-ui .info .title { color: #F7F7F9; }
+  body[data-theme="dark"] .swagger-ui .info p, body[data-theme="dark"] .swagger-ui .info li { color: #8E8E99; }
+  body[data-theme="dark"] .swagger-ui .opblock-tag { color: #F7F7F9; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .swagger-ui .opblock { background: #0F0F12; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .swagger-ui .opblock-summary-path { color: #F7F7F9; }
+  body[data-theme="dark"] .swagger-ui .opblock-summary-description { color: #8E8E99; }
+  body[data-theme="dark"] .swagger-ui .scheme-container { background: #0F0F12; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .swagger-ui .model-box, body[data-theme="dark"] .swagger-ui .model-container { background: #17171B; }
+  body[data-theme="dark"] .swagger-ui section.models { background: #0F0F12; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .swagger-ui section.models h4 { color: #F7F7F9; border-color: rgba(255,255,255,.06); }
+  body[data-theme="dark"] .docs-footer { border-color: rgba(255,255,255,.06); color: #8E8E99; }
+</style>
+</head>
+<body>
+<header class="docs-topbar">
+  <a class="docs-logo" href="/">
+    <span class="docs-logo-badge">P</span>
+    <span class="docs-logo-name">Pinterest Scraper</span>
+    <span class="docs-logo-tag">API</span>
+  </a>
+  <nav class="docs-nav">
+    <a href="/"><i class="bi bi-house"></i> Home</a>
+    <a href="/api/health" target="_blank"><i class="bi bi-activity"></i> Health</a>
+    <a href="/openapi.json" target="_blank" class="primary"><i class="bi bi-filetype-json"></i> OpenAPI</a>
+  </nav>
+</header>
+<div id="swagger-ui"></div>
+<div class="docs-footer">Made with <span style="color:#E60023">♥</span> using FastAPI</div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+  (function() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.body.dataset.theme = savedTheme || prefers;
+  })();
+  SwaggerUIBundle({
+    url: '/openapi.json',
+    dom_id: '#swagger-ui',
+    deepLinking: true,
+    docExpansion: 'list',
+    defaultModelsExpandDepth: 0,
+    defaultModelExpandDepth: 1,
+    displayRequestDuration: true,
+    filter: true,
+    tryItOutEnabled: true,
+    persistAuthorization: true,
+    syntaxHighlight: { activate: true, theme: 'agate' },
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: 'BaseLayout',
+  });
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_docs():
+    return HTMLResponse(DOCS_HTML)
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc():
+    from fastapi.openapi.docs import get_redoc_html
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title="Pinterest Scraper · ReDoc",
+    )
 
 
 @app.get("/")
