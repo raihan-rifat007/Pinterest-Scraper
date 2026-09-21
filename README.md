@@ -81,7 +81,7 @@ Search, board-scrape, download, deduplicate, export — all from a single interf
 
 | Search View | Pin Modal | Gallery |
 |:-----------:|:---------:|:-------:|
-| `docs/search.png` | `docs/modal.png` | `docs/gallery.png` |
+| `docs/Search.png` | `docs/Modal.png` | `docs/Docs.png` |
 
 ---
 
