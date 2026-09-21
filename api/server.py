@@ -208,7 +208,7 @@ def _out_dir() -> Path:
 
 app = FastAPI(
     title="Pinterest Scraper API",
-    version="1.4.0",
+    version="07",
     description="High-quality Pinterest scraper API with job events, exports, and gallery management.",
     docs_url=None,
     redoc_url=None,
