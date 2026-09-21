@@ -195,7 +195,7 @@ Search · Board scrape · Download · Deduplicate · Export — all from one int
   <img src="docs/Search.png" width="100%" alt="Search View" />
 </a>
 
-<sub>Premium masonry grid with live scrape progress</sub>
+<sub>Premium Search Suggestions Bar</sub>
 
 </td>
 <td align="center" width="50%">
