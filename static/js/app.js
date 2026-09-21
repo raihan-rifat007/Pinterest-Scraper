@@ -97,7 +97,6 @@ function openDrawer(open) {
   $('settings-drawer').setAttribute('aria-hidden', String(!open));
   $('overlay').classList.toggle('open', open);
 }
-
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -114,13 +113,8 @@ function fmtDuration(seconds) {
   const s = Math.round(seconds % 60);
   return m + 'm ' + s + 's';
 }
-
 window.showToast = function (msg, type = 'info', duration = 3500, action = null) {
-  const icons = {
-    success: 'bi-check-circle-fill',
-    error: 'bi-exclamation-octagon-fill',
-    info: 'bi-info-circle-fill',
-  };
+  const icons = { success: 'bi-check-circle-fill', error: 'bi-exclamation-octagon-fill', info: 'bi-info-circle-fill' };
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.innerHTML = `<i class="bi ${icons[type] || icons.info}"></i><div class="toast-msg"></div>`;
@@ -138,19 +132,10 @@ window.showToast = function (msg, type = 'info', duration = 3500, action = null)
     el.appendChild(btn);
   }
   $('toast-container').appendChild(el);
-  if (duration > 0) {
-    setTimeout(() => {
-      el.classList.add('out');
-      setTimeout(() => el.remove(), 320);
-    }, duration);
-  }
+  if (duration > 0) setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, duration);
   return el;
 };
-
-window.showError = function (msg) {
-  if (!msg) return;
-  window.showToast(msg, 'error', 4000);
-};
+window.showError = function (msg) { if (!msg) return; window.showToast(msg, 'error', 4000); };
 
 async function checkHealth() {
   const dot = $('status-dot');
@@ -162,9 +147,7 @@ async function checkHealth() {
       if (dot) { dot.classList.remove('offline'); dot.classList.add('online'); }
       if (eyebrow) { eyebrow.classList.remove('offline'); eyebrow.classList.add('online'); }
       if (statusText) statusText.textContent = 'Connected · Pinterest Scraper';
-    } else {
-      throw new Error('bad status');
-    }
+    } else throw new Error('bad status');
   } catch {
     if (dot) { dot.classList.remove('online'); dot.classList.add('offline'); }
     if (eyebrow) { eyebrow.classList.remove('online'); eyebrow.classList.add('offline'); }
@@ -172,10 +155,8 @@ async function checkHealth() {
   }
 }
 
-// ====== History ======
 function getHistory() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || '[]'); }
-  catch { return []; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || '[]'); } catch { return []; }
 }
 function addHistory(entry) {
   const list = getHistory();
@@ -190,11 +171,8 @@ function clearHistory() {
   renderHistory();
   window.showToast('History cleared', 'success');
 }
-
-// ====== Recent searches ======
 function getRecent() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.recent) || '[]'); }
-  catch { return []; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.recent) || '[]'); } catch { return []; }
 }
 function addRecent(q) {
   if (!q) return;
@@ -211,31 +189,21 @@ function renderRecent() {
   if (!list.length) { row.classList.add('hidden'); row.innerHTML = ''; return; }
   row.classList.remove('hidden');
   row.innerHTML = list.slice(0, 6).map(q =>
-    `<button class="suggestion-pill" data-q="${escapeHtml(q)}">
-      <i class="bi bi-clock-history"></i> ${escapeHtml(q)}
-    </button>`
+    `<button class="suggestion-pill" data-q="${escapeHtml(q)}"><i class="bi bi-clock-history"></i> ${escapeHtml(q)}</button>`
   ).join('');
   row.querySelectorAll('.suggestion-pill').forEach(b => {
-    b.onclick = () => {
-      $('search-input').value = b.dataset.q;
-      startScrape();
-    };
+    b.onclick = () => { $('search-input').value = b.dataset.q; startScrape(); };
   });
 }
 function renderSidebarRecent() {
   const list = $('sidebar-recent-list');
   if (!list) return;
   const recents = getRecent();
-  if (!recents.length) {
-    list.innerHTML = '<div class="sidebar-empty">No recent searches</div>';
-    return;
-  }
+  if (!recents.length) { list.innerHTML = '<div class="sidebar-empty">No recent searches</div>'; return; }
   list.innerHTML = recents.slice(0, 8).map(q => `
     <button class="recent-item" data-q="${escapeHtml(q)}">
-      <i class="bi bi-clock-history"></i>
-      <span>${escapeHtml(q)}</span>
-    </button>
-  `).join('');
+      <i class="bi bi-clock-history"></i><span>${escapeHtml(q)}</span>
+    </button>`).join('');
   list.querySelectorAll('.recent-item').forEach(b => {
     b.onclick = () => {
       $('search-input').value = b.dataset.q;
@@ -245,24 +213,13 @@ function renderSidebarRecent() {
   });
 }
 
-// ====== Scrape ======
 async function startScrape() {
   const query = $('search-input').value.trim();
-  if (!query) {
-    window.showError('Please enter a search term.');
-    $('search-input').focus();
-    return;
-  }
+  if (!query) { window.showError('Please enter a search term.'); $('search-input').focus(); return; }
   readDrawerToSettings();
-
-  if (currentView !== 'search') {
-    currentView = 'search';
-    setActiveNav('search');
-  }
-
+  if (currentView !== 'search') { currentView = 'search'; setActiveNav('search'); }
   const hero = $('hero');
   if (hero) hero.classList.add('hidden');
-
   $('empty').classList.add('hidden');
   $('stats-card').classList.add('hidden');
   showSkeletons();
@@ -270,22 +227,16 @@ async function startScrape() {
   addHistory({ type: 'search', query });
   initProgress('Collecting pins');
   pushURLState({ q: query });
-
   const body = { mode: 'search', query, ...settings };
   delete body.show_insights;
   delete body.dedup;
-
   try {
     const res = await fetch('/api/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      window.showError(`Scraping failed: ${res.status}`);
-      $('progress-card').classList.add('hidden');
-      return;
-    }
+    if (!res.ok) { window.showError(`Scraping failed: ${res.status}`); $('progress-card').classList.add('hidden'); return; }
     const { job_id } = await res.json();
     currentJob = job_id;
     listenEvents(job_id);
@@ -297,12 +248,7 @@ async function startScrape() {
 
 function listenEvents(jobId) {
   const es = new EventSource(`/api/jobs/${jobId}/events`);
-  es.onmessage = (e) => {
-    try {
-      const ev = JSON.parse(e.data);
-      handleEvent(ev, es);
-    } catch {}
-  };
+  es.onmessage = (e) => { try { const ev = JSON.parse(e.data); handleEvent(ev, es); } catch {} };
   es.onerror = () => es.close();
 }
 
@@ -318,9 +264,7 @@ function handleEvent(ev, es) {
     $('progress-title').textContent = labels[ev.phase] || ev.phase;
     $('progress-bar').classList.toggle('indeterminate', ev.phase === 'collect' && !ev.total);
     const prevIdx = phaseOrder.indexOf(ev.phase);
-    for (let i = 0; i < prevIdx; i++) {
-      if (phaseState[phaseOrder[i]]) phaseState[phaseOrder[i]].done = true;
-    }
+    for (let i = 0; i < prevIdx; i++) if (phaseState[phaseOrder[i]]) phaseState[phaseOrder[i]].done = true;
     currentPhase = ev.phase;
     if (!phaseState[ev.phase]) phaseState[ev.phase] = { count: 0, total: ev.total || 0, done: false };
     if (ev.total) phaseState[ev.phase].total = ev.total;
@@ -333,9 +277,7 @@ function handleEvent(ev, es) {
     if (currentPhase && phaseState[currentPhase]) {
       phaseState[currentPhase].count = ev.count;
       if (ev.total) phaseState[currentPhase].total = ev.total;
-      if (phaseState[currentPhase].total > 0 && phaseState[currentPhase].count >= phaseState[currentPhase].total) {
-        phaseState[currentPhase].done = true;
-      }
+      if (phaseState[currentPhase].total > 0 && phaseState[currentPhase].count >= phaseState[currentPhase].total) phaseState[currentPhase].done = true;
     }
     updatePhaseUI();
     updateRate(ev.count);
@@ -368,9 +310,7 @@ function updateRate(count) {
       const perItem = elapsed / st.count;
       const remaining = (st.total - st.count) * perItem;
       etaEl.textContent = '~' + fmtDuration(remaining);
-    } else {
-      etaEl.textContent = '';
-    }
+    } else etaEl.textContent = '';
   }
 }
 
@@ -414,13 +354,9 @@ async function finishJob(ev) {
       if (hasImages) {
         $('exp-zip').href = `/api/jobs/${currentJob}/export/zip`;
         $('exp-zip').classList.remove('hidden');
-      } else {
-        $('exp-zip').classList.add('hidden');
-      }
+      } else $('exp-zip').classList.add('hidden');
       $('export-bar').classList.remove('hidden');
-    } else {
-      $('export-bar').classList.add('hidden');
-    }
+    } else $('export-bar').classList.add('hidden');
   } catch (e) {
     window.showError('Failed to load results');
   }
@@ -439,10 +375,7 @@ function initProgress(title) {
   $('progress-eta').textContent = '';
   $('progress-rate').textContent = '';
   const cancelBtn = $('cancel-btn');
-  if (cancelBtn) {
-    cancelBtn.disabled = false;
-    cancelBtn.innerHTML = '<i class="bi bi-x-circle"></i> Cancel';
-  }
+  if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerHTML = '<i class="bi bi-x-circle"></i> Cancel'; }
   phaseOrder.forEach(p => { phaseState[p] = { count: 0, total: 0, done: false }; });
   currentPhase = 'collect';
   progressStartTime = performance.now();
@@ -516,26 +449,16 @@ function renderStats(ev) {
   $('stats-card').classList.remove('hidden');
 }
 
-// ====== Filter + Sort ======
 function pinMatchesFilter(pin, filter) {
   if (filter === 'all') return true;
   const isVideo = !!(pin.is_video && pin.video_url);
   if (filter === 'video') return isVideo;
   if (filter === 'downloaded') return !!pin.local_file;
-  if (filter === 'hd') {
-    const w = pin.width || 0;
-    const h = pin.height || 0;
-    return (w >= 1000 || h >= 1000);
-  }
-  if (filter === 'portrait') {
-    return pin.width && pin.height && pin.height > pin.width;
-  }
-  if (filter === 'landscape') {
-    return pin.width && pin.height && pin.width > pin.height;
-  }
+  if (filter === 'hd') return ((pin.width || 0) >= 1000 || (pin.height || 0) >= 1000);
+  if (filter === 'portrait') return pin.width && pin.height && pin.height > pin.width;
+  if (filter === 'landscape') return pin.width && pin.height && pin.width > pin.height;
   return true;
 }
-
 function sortPins(pins, sort) {
   const arr = [...pins];
   if (sort === 'saves') return arr.sort((a, b) => (b.saves || 0) - (a.saves || 0));
@@ -545,18 +468,14 @@ function sortPins(pins, sort) {
   if (sort === 'oldest') return arr.reverse();
   return arr;
 }
-
 function applyFilterAndSort() {
   let pins = allPins.slice();
-  if (activeFilter !== 'all') {
-    pins = pins.filter(p => pinMatchesFilter(p, activeFilter));
-  }
+  if (activeFilter !== 'all') pins = pins.filter(p => pinMatchesFilter(p, activeFilter));
   pins = sortPins(pins, activeSort);
   filteredPins = pins;
   updateFilterStatus();
   resetFeed(pins);
 }
-
 function updateFilterStatus() {
   const statusEl = $('filter-status');
   if (!statusEl) return;
@@ -569,44 +488,25 @@ function updateFilterStatus() {
       <button class="clear-filters" id="clear-filters-btn">Clear all</button>`;
     const btn = $('clear-filters-btn');
     if (btn) btn.onclick = () => {
-      activeFilter = 'all';
-      activeSort = 'newest';
-      updateFilterChips();
-      updateSortLabel();
+      activeFilter = 'all'; activeSort = 'newest';
+      updateFilterChips(); updateSortLabel();
       applyFilterAndSort();
     };
-  } else {
-    statusEl.classList.add('hidden');
-  }
+  } else statusEl.classList.add('hidden');
 }
-
 function updateFilterChips() {
-  $$('.filter-chip').forEach(ch => {
-    ch.classList.toggle('active', ch.dataset.filter === activeFilter);
-  });
+  $$('.filter-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.filter === activeFilter));
 }
-
 function updateSortLabel() {
-  const labels = {
-    newest: 'Newest',
-    oldest: 'Oldest',
-    saves: 'Most saved',
-    comments: 'Most commented',
-    resolution: 'Highest res',
-    title: 'Title A–Z',
-  };
+  const labels = { newest: 'Newest', oldest: 'Oldest', saves: 'Most saved', comments: 'Most commented', resolution: 'Highest res', title: 'Title A–Z' };
   $('sort-label').textContent = labels[activeSort] || 'Newest';
-  $$('#sort-menu button').forEach(b => {
-    b.classList.toggle('active', b.dataset.sort === activeSort);
-  });
+  $$('#sort-menu button').forEach(b => b.classList.toggle('active', b.dataset.sort === activeSort));
 }
 
-// ====== Grid rendering (FIXED) ======
 function pinResolutionBadge(pin) {
   if (!pin.width || !pin.height) return '';
   const min = Math.min(pin.width, pin.height);
-  let cls = 'res';
-  let icon = '';
+  let cls = 'res'; let icon = '';
   if (min >= 1000) { cls = 'hd'; icon = 'HD'; }
   const label = icon || `${pin.width}×${pin.height}`;
   return `<div class="pin-badge ${cls}"><i class="bi bi-badge-hd"></i>${escapeHtml(label)}</div>`;
@@ -640,15 +540,11 @@ function renderGrid(pins, incremental) {
     if (selectedFiles.has(pin.local_file)) card.classList.add('selected');
     card.style.animationDelay = `${Math.min(i * 0.03, 0.6)}s`;
 
-    const aspect = pin.width && pin.height ? (pin.width + '/' + pin.height) : null;
     const imgBlock = src
       ? `<img class="pin-img" loading="lazy" src="${src}"
             alt="${escapeHtml(pin.title || pin.pin_id)}"
             referrerpolicy="no-referrer"
-            decoding="async"
-            ${pin.width ? `width="${pin.width}"` : ''}
-            ${pin.height ? `height="${pin.height}"` : ''}
-            ${aspect ? `style="aspect-ratio:${aspect}"` : ''}>`
+            decoding="async">`
       : `<div class="pin-no-img"><i class="bi bi-image"></i></div>`;
 
     const badges = [
@@ -666,8 +562,7 @@ function renderGrid(pins, incremental) {
         </div>` : '';
 
     const sizeLine = pin.width
-      ? `<div class="stats"><span><i class="bi bi-aspect-ratio"></i> ${pin.width} × ${pin.height}</span></div>`
-      : '';
+      ? `<div class="stats"><span><i class="bi bi-aspect-ratio"></i> ${pin.width} × ${pin.height}</span></div>` : '';
 
     card.innerHTML = `
       ${imgBlock}
@@ -690,7 +585,6 @@ function renderGrid(pins, incremental) {
         </div>
       </div>`;
 
-    // FIXED: robust image load/error handling with timeout fallback
     const imgEl = card.querySelector('.pin-img');
     if (imgEl) {
       let settled = false;
@@ -699,7 +593,6 @@ function renderGrid(pins, incremental) {
         settled = true;
         imgEl.classList.add(ok ? 'img-loaded' : 'img-failed');
       };
-
       if (imgEl.complete) {
         settle(imgEl.naturalWidth > 0);
       } else {
@@ -709,11 +602,8 @@ function renderGrid(pins, incremental) {
           if (fallback && imgEl.src !== fallback && !imgEl.dataset.triedFallback) {
             imgEl.dataset.triedFallback = '1';
             imgEl.src = fallback;
-          } else {
-            settle(false);
-          }
+          } else settle(false);
         });
-        // safety: after 8s force-visible so it never stays blank
         setTimeout(() => settle(imgEl.naturalWidth > 0), 8000);
       }
     }
@@ -723,7 +613,6 @@ function renderGrid(pins, incremental) {
       if (e.target.closest('a, button')) return;
       openPinDetail(pin);
     });
-
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openContextMenu(e.clientX, e.clientY, pin);
@@ -765,16 +654,11 @@ function quickSaveToCollection(pin) {
     saveCollections(cols);
     window.showToast(`Saved to "${target.name}"`, 'success');
     updateNavBadges();
-  } else {
-    window.showToast(`Already in "${target.name}"`, 'info');
-  }
+  } else window.showToast(`Already in "${target.name}"`, 'info');
 }
 
 function quickRemovePin(pin) {
-  if (!pin.local_file) {
-    window.showToast('No local file to remove', 'info');
-    return;
-  }
+  if (!pin.local_file) { window.showToast('No local file to remove', 'info'); return; }
   const card = document.querySelector(`.pin-card[data-pin-id="${pin.pin_id}"]`);
   if (card) card.classList.add('quick-remove');
   fetch('/api/images/delete', {
@@ -785,10 +669,7 @@ function quickRemovePin(pin) {
     lastPins = lastPins.filter(p => p.pin_id !== pin.pin_id);
     allPins = allPins.filter(p => p.pin_id !== pin.pin_id);
     window._lastPins = lastPins;
-    setTimeout(() => {
-      card?.remove();
-      updateGalleryBadge();
-    }, 300);
+    setTimeout(() => { card?.remove(); updateGalleryBadge(); }, 300);
     window.showToast('Removed', 'success');
   }).catch(() => {
     card?.classList.remove('quick-remove');
@@ -797,9 +678,7 @@ function quickRemovePin(pin) {
 }
 
 function setActiveNav(view) {
-  $$('.nav-btn-main').forEach(b => {
-    b.classList.toggle('active', b.dataset.nav === view);
-  });
+  $$('.nav-btn-main').forEach(b => b.classList.toggle('active', b.dataset.nav === view));
 }
 
 async function updateGalleryBadge() {
@@ -887,9 +766,7 @@ function showSearch() {
       if (hasImages) {
         $('exp-zip').href = `/api/jobs/${currentJob}/export/zip`;
         $('exp-zip').classList.remove('hidden');
-      } else {
-        $('exp-zip').classList.add('hidden');
-      }
+      } else $('exp-zip').classList.add('hidden');
       $('export-bar').classList.remove('hidden');
     }
   } else {
@@ -903,7 +780,6 @@ function showSearch() {
   renderRecent();
 }
 
-// FIXED: resetFeed no longer overwrites allPins
 function resetFeed(pins) {
   lastPins = pins || lastPins;
   window._lastPins = lastPins;
@@ -932,26 +808,19 @@ function showSkeletons(n = 12) {
   }
 }
 
-// ====== Pin Detail Side Panel ======
 function openPinDetail(pin) {
   const pins = filteredPins.length ? filteredPins : (window._lastPins || lastPins || []);
   const idx = pins.findIndex(p => p.pin_id === pin.pin_id);
   if (idx < 0) return;
-  if (window.innerWidth < 1024) {
-    openPinModal(pin);
-    return;
-  }
+  if (window.innerWidth < 1024) { openPinModal(pin); return; }
   detailPinId = pin.pin_id;
   pmIndex = idx;
   renderPinDetail(pins, idx);
   const panel = $('pin-detail');
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
-  document.querySelectorAll('.pin-card').forEach(c => {
-    c.classList.toggle('selected', c.dataset.pinId === pin.pin_id);
-  });
+  document.querySelectorAll('.pin-card').forEach(c => c.classList.toggle('selected', c.dataset.pinId === pin.pin_id));
 }
-
 function closePinDetail() {
   const panel = $('pin-detail');
   panel.classList.remove('open');
@@ -959,7 +828,6 @@ function closePinDetail() {
   detailPinId = null;
   document.querySelectorAll('.pin-card').forEach(c => c.classList.remove('selected'));
 }
-
 function renderPinDetail(pins, idx) {
   if (idx < 0 || idx >= pins.length) return;
   const pin = pins[idx];
@@ -969,9 +837,7 @@ function renderPinDetail(pins, idx) {
   const creatorName = pin.creator_name || pin.creator_username || 'Unknown creator';
   const creatorUser = pin.creator_username ? `@${pin.creator_username}` : '';
   const initial = creatorName ? creatorName.trim()[0].toUpperCase() : '?';
-
   $('detail-counter').textContent = `${idx + 1} / ${pins.length}`;
-
   let imageHTML;
   if (isVideo) {
     imageHTML = `<video src="${escapeHtml(pin.video_url)}" muted loop playsinline controls autoplay></video>`;
@@ -979,7 +845,6 @@ function renderPinDetail(pins, idx) {
     imageHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(pin.title || '')}" referrerpolicy="no-referrer"
       onerror="this.onerror=null;this.src='${escapeHtml(pin.image_url || '')}'">`;
   }
-
   const badgesHTML = `
     <div class="pd-stats">
       ${pin.saves != null ? `<span class="pd-stat"><i class="bi bi-bookmark-heart"></i> <b>${fmtNum(pin.saves)}</b> saves</span>` : ''}
@@ -987,7 +852,6 @@ function renderPinDetail(pins, idx) {
       ${pin.width ? `<span class="pd-stat"><i class="bi bi-aspect-ratio"></i> <b>${pin.width}×${pin.height}</b></span>` : ''}
       ${pin.local_file ? `<span class="pd-stat"><i class="bi bi-hdd"></i> On disk</span>` : ''}
     </div>`;
-
   const colorsHTML = (pin.dominant_color || (pin.colors && pin.colors.length))
     ? `<div class="pm-colors-wrap">
         <span class="pm-section-label"><i class="bi bi-palette-fill"></i> Palette</span>
@@ -997,7 +861,6 @@ function renderPinDetail(pins, idx) {
           ).join('')}
         </div>
       </div>` : '';
-
   $('detail-body').innerHTML = `
     <div class="pd-image">${imageHTML}</div>
     <div class="pd-info">
@@ -1019,27 +882,20 @@ function renderPinDetail(pins, idx) {
         ${pin.pin_url ? `<a class="btn ghost small" href="${escapeHtml(pin.pin_url)}" target="_blank" rel="noopener"><i class="bi bi-pinterest"></i> Pinterest</a>` : ''}
       </div>
     </div>`;
-
   $('detail-body').querySelectorAll('.color-chip').forEach(c => {
     c.onclick = () => {
       navigator.clipboard?.writeText(c.dataset.color);
       window.showToast(`Copied ${c.dataset.color}`, 'success', 1500);
     };
   });
-
   const colBtn = $('pd-collection');
   if (colBtn) colBtn.onclick = () => quickSaveToCollection(pin);
   const visBtn = $('pd-visual');
   if (visBtn) visBtn.onclick = () => runVisualSearch(pin.pin_id);
-
   const openModalBtn = $('detail-open-modal');
-  openModalBtn.onclick = () => {
-    closePinDetail();
-    openPinModal(pin);
-  };
+  openModalBtn.onclick = () => { closePinDetail(); openPinModal(pin); };
 }
 
-// ====== Pin Modal ======
 function showPinAt(index) {
   const pins = window._lastPins || lastPins || [];
   if (!pins.length) return;
@@ -1082,16 +938,13 @@ function showPinAt(index) {
     linkEl.href = `https://www.pinterest.com/${pin.creator_username}/`;
     linkEl.classList.remove('hidden');
   } else linkEl.classList.add('hidden');
-
   $('pm-title').textContent = pin.title || `Pin ${pin.pin_id}`;
   const descEl = $('pm-desc');
   descEl.textContent = pin.description || '';
   descEl.classList.toggle('hidden', !pin.description);
-
   $('pm-val-saves').textContent = fmtNum(pin.saves ?? 0);
   $('pm-val-comments').textContent = fmtNum(pin.comments ?? 0);
   $('pm-val-size').textContent = (pin.width && pin.height) ? `${pin.width} × ${pin.height}` : '—';
-
   const boardRow = $('pm-board-row');
   const boardLink = $('pm-board-name');
   if (pin.board_name) {
@@ -1099,7 +952,6 @@ function showPinAt(index) {
     boardLink.textContent = pin.board_name;
     boardLink.href = pin.board_url || '#';
   } else boardRow.classList.add('hidden');
-
   const colorsWrap = $('pm-colors');
   const colorsParent = colorsWrap ? colorsWrap.closest('.pm-colors-wrap') : null;
   if (colorsWrap) {
@@ -1224,7 +1076,6 @@ function renderChart() {
   });
 }
 
-// ====== Theme ======
 function applyTheme(t) {
   document.body.dataset.theme = t;
   try { localStorage.setItem(STORAGE_KEYS.theme, t); } catch {}
@@ -1240,15 +1091,11 @@ function initTheme() {
   const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   applyTheme(saved || sys);
   const btn = document.getElementById('theme-btn');
-  if (btn) btn.onclick = () => {
-    applyTheme(document.body.dataset.theme === 'dark' ? 'light' : 'dark');
-  };
+  if (btn) btn.onclick = () => applyTheme(document.body.dataset.theme === 'dark' ? 'light' : 'dark');
 }
 
-// ====== Collections ======
 function getCollections() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.collections) || '[]'); }
-  catch { return []; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.collections) || '[]'); } catch { return []; }
 }
 function saveCollections(list) {
   try { localStorage.setItem(STORAGE_KEYS.collections, JSON.stringify(list)); } catch {}
@@ -1270,8 +1117,7 @@ function renderCollections() {
         <div class="collection-item-meta">${(c.pins || []).length} pins</div>
       </div>
       <button data-col-delete="${c.id}" title="Delete"><i class="bi bi-trash3"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
   list.querySelectorAll('[data-col-delete]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -1287,10 +1133,7 @@ function renderCollections() {
       const col = getCollections().find(c => c.id === id);
       if (!col) return;
       const pins = (window._lastPins || []).filter(p => (col.pins || []).includes(p.pin_id));
-      if (!pins.length) {
-        window.showToast('No pins from current results in this collection', 'info');
-        return;
-      }
+      if (!pins.length) { window.showToast('No pins from current results in this collection', 'info'); return; }
       allPins = pins;
       applyFilterAndSort();
       closeAllPanels();
@@ -1332,8 +1175,7 @@ function renderSchedules(list) {
         <div class="schedule-item-meta">${escapeHtml(s.mode)} · every ${s.interval_hours}h · limit ${s.limit}${s.runs ? ' · ran ' + s.runs + 'x' : ''}</div>
       </div>
       <button data-sch-delete="${s.id}" title="Delete"><i class="bi bi-trash3"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
   el.querySelectorAll('[data-sch-delete]').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.dataset.schDelete;
@@ -1341,9 +1183,7 @@ function renderSchedules(list) {
         await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
         window.showToast('Schedule removed', 'success');
         refreshSchedulesBadge();
-      } catch {
-        window.showError('Delete failed');
-      }
+      } catch { window.showError('Delete failed'); }
     };
   });
 }
@@ -1368,12 +1208,9 @@ async function addSchedule() {
     $('sch-query').value = '';
     refreshSchedulesBadge();
     addHistory({ type: 'schedule', query: q });
-  } catch {
-    window.showError('Failed to create schedule');
-  }
+  } catch { window.showError('Failed to create schedule'); }
 }
 
-// ====== History ======
 function renderHistory() {
   const list = $('history-list');
   if (!list) return;
@@ -1400,12 +1237,8 @@ function renderHistory() {
   }).join('');
 }
 
-function openHistoryPanel() {
-  renderHistory();
-  openPanel('history-panel');
-}
+function openHistoryPanel() { renderHistory(); openPanel('history-panel'); }
 
-// ====== Side panels ======
 function closeAllPanels() {
   $$('.side-panel').forEach(p => p.classList.remove('open'));
   closePinDetail();
@@ -1415,15 +1248,11 @@ function closeAllPanels() {
 function openPanel(id) {
   closeAllPanels();
   const p = document.getElementById(id);
-  if (p) {
-    p.classList.add('open');
-    p.setAttribute('aria-hidden', 'false');
-  }
+  if (p) { p.classList.add('open'); p.setAttribute('aria-hidden', 'false'); }
 }
 function openSchedulesPanel() { refreshSchedulesBadge(); openPanel('schedules-panel'); }
 function openCollectionsPanel() { renderCollections(); openPanel('collections-panel'); }
 
-// ====== Selection ======
 function setSelectionMode(on) {
   selectionMode = on;
   document.querySelectorAll('.pin-card').forEach(c => c.classList.toggle('selectable', on));
@@ -1441,10 +1270,7 @@ function updateSelBar() {
 }
 function toggleSelect(card) {
   const pin = card._pin;
-  if (!pin || !pin.local_file) {
-    window.showToast('Only downloaded images can be selected', 'info', 2200);
-    return;
-  }
+  if (!pin || !pin.local_file) { window.showToast('Only downloaded images can be selected', 'info', 2200); return; }
   if (selectedFiles.has(pin.local_file)) {
     selectedFiles.delete(pin.local_file);
     card.classList.remove('selected');
@@ -1454,7 +1280,6 @@ function toggleSelect(card) {
   }
   updateSelBar();
 }
-
 async function bulkDownloadSelected() {
   if (!selectedFiles.size) return;
   const pins = (window._lastPins || []).filter(p => selectedFiles.has(p.local_file));
@@ -1470,27 +1295,19 @@ async function bulkDownloadSelected() {
   }
   window.showToast(`Downloading ${n} file${n === 1 ? '' : 's'}`, 'success');
 }
-
 async function bulkSaveToCollection() {
   if (!selectedFiles.size) return;
   const cols = getCollections();
-  if (!cols.length) {
-    window.showToast('Create a collection first', 'info');
-    openCollectionsPanel();
-    return;
-  }
+  if (!cols.length) { window.showToast('Create a collection first', 'info'); openCollectionsPanel(); return; }
   const target = cols[0];
   if (!target.pins) target.pins = [];
   const pins = (window._lastPins || []).filter(p => selectedFiles.has(p.local_file));
   let added = 0;
-  for (const p of pins) {
-    if (!target.pins.includes(p.pin_id)) { target.pins.push(p.pin_id); added++; }
-  }
+  for (const p of pins) if (!target.pins.includes(p.pin_id)) { target.pins.push(p.pin_id); added++; }
   saveCollections(cols);
   window.showToast(`Added ${added} pin${added === 1 ? '' : 's'} to "${target.name}"`, 'success');
 }
 
-// ====== Command Palette ======
 function getCommands() {
   const cmds = [
     { id: 'focus-search', icon: 'bi-search', label: 'Search pins', sub: 'Focus search box',
@@ -1516,12 +1333,7 @@ function getCommands() {
     { id: 'view-list', icon: 'bi-list-ul', label: 'List view', sub: 'Row layout',
       action: () => { closeCP(); applyViewMode('list'); } },
     { id: 'reset-filters', icon: 'bi-funnel', label: 'Reset filters', sub: 'Clear filter & sort',
-      action: () => {
-        closeCP();
-        activeFilter = 'all'; activeSort = 'newest';
-        updateFilterChips(); updateSortLabel();
-        applyFilterAndSort();
-      } },
+      action: () => { closeCP(); activeFilter = 'all'; activeSort = 'newest'; updateFilterChips(); updateSortLabel(); applyFilterAndSort(); } },
   ];
   if (currentView === 'gallery') {
     cmds.push({ id: 'gallery-zip', icon: 'bi-file-zip', label: 'Download gallery ZIP', sub: 'All images',
@@ -1532,10 +1344,8 @@ function getCommands() {
   }
   return cmds;
 }
-
 let cpIndex = -1;
 let cpItems = [];
-
 function fuzzyScore(text, q) {
   if (!q) return 1;
   text = text.toLowerCase(); q = q.toLowerCase();
@@ -1544,29 +1354,24 @@ function fuzzyScore(text, q) {
     if (text[ti] === q[qi]) {
       score += 10 + consec * 4;
       if (ti === 0 || text[ti - 1] === ' ' || text[ti - 1] === '-') score += 6;
-      consec++;
-      qi++;
+      consec++; qi++;
     } else consec = 0;
     ti++;
   }
   return qi === q.length ? score - text.length * 0.05 : 0;
 }
-
 function renderCP(query = '') {
   const cpBody = $('cp-body');
   const q = query.trim();
   const sections = [];
   const commands = getCommands();
-
   if (!q) {
     const recents = getRecent().slice(0, 5);
     if (recents.length) {
       sections.push({
         title: 'Recent searches',
         items: recents.map(r => ({
-          icon: 'bi-clock-history',
-          label: r,
-          sub: 'Recent search',
+          icon: 'bi-clock-history', label: r, sub: 'Recent search',
           action: () => { closeCP(); $('search-input').value = r; startScrape(); },
         })),
       });
@@ -1575,21 +1380,14 @@ function renderCP(query = '') {
   } else {
     const scored = commands
       .map(c => ({ c, s: Math.max(fuzzyScore(c.label, q), fuzzyScore(c.sub || '', q) * 0.7) }))
-      .filter(x => x.s > 0)
-      .sort((a, b) => b.s - a.s)
-      .map(x => x.c);
+      .filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.c);
     if (scored.length) sections.push({ title: 'Commands', items: scored });
     sections.push({
       title: 'Search',
-      items: [{
-        icon: 'bi-search',
-        label: `Search for "${query}"`,
-        sub: 'Start scrape',
-        action: () => { closeCP(); $('search-input').value = query; startScrape(); },
-      }],
+      items: [{ icon: 'bi-search', label: `Search for "${query}"`, sub: 'Start scrape',
+        action: () => { closeCP(); $('search-input').value = query; startScrape(); } }],
     });
   }
-
   cpItems = [];
   let html = '';
   sections.forEach(sec => {
@@ -1609,10 +1407,7 @@ function renderCP(query = '') {
   cpBody.innerHTML = html || `<div class="cp-empty"><i class="bi bi-search" style="font-size:1.6rem;display:block;margin-bottom:10px;opacity:.4"></i>No results</div>`;
   cpBody.querySelectorAll('.cp-item').forEach(el => {
     el.addEventListener('mouseenter', () => setCPIndex(+el.dataset.idx));
-    el.addEventListener('click', () => {
-      const it = cpItems[+el.dataset.idx];
-      if (it) it.action();
-    });
+    el.addEventListener('click', () => { const it = cpItems[+el.dataset.idx]; if (it) it.action(); });
   });
   setCPIndex(0);
 }
@@ -1638,7 +1433,6 @@ function closeCP() {
   cp.setAttribute('aria-hidden', 'true');
 }
 
-// ====== Context Menu ======
 let contextMenuTarget = null;
 function openContextMenu(x, y, pin) {
   contextMenuTarget = pin;
@@ -1657,20 +1451,14 @@ function openContextMenu(x, y, pin) {
       if (src) window.open(src, '_blank');
     } },
   ];
-  if (pin.local_file) {
-    actions.push({ icon: 'bi-trash3', label: 'Remove from disk', danger: true, fn: () => quickRemovePin(pin) });
-  }
+  if (pin.local_file) actions.push({ icon: 'bi-trash3', label: 'Remove from disk', danger: true, fn: () => quickRemovePin(pin) });
   menu.innerHTML = actions.map(a => {
     if (a.sep) return '<div class="context-sep"></div>';
     return `<button class="${a.danger ? 'danger' : ''}" data-ctx><i class="bi ${a.icon}"></i>${escapeHtml(a.label)}</button>`;
   }).join('');
   const btns = menu.querySelectorAll('button[data-ctx]');
   let idx = 0;
-  actions.forEach(a => {
-    if (a.sep) return;
-    btns[idx].onclick = () => { closeContextMenu(); a.fn(); };
-    idx++;
-  });
+  actions.forEach(a => { if (a.sep) return; btns[idx].onclick = () => { closeContextMenu(); a.fn(); }; idx++; });
   menu.classList.remove('hidden');
   const rect = menu.getBoundingClientRect();
   const mw = 220, mh = rect.height || 260;
@@ -1683,11 +1471,9 @@ function closeContextMenu() {
   contextMenuTarget = null;
 }
 
-// ====== Sort Menu ======
 function openSortMenu() { $('sort-menu').classList.remove('hidden'); }
 function closeSortMenu() { $('sort-menu').classList.add('hidden'); }
 
-// ====== View mode ======
 function applyViewMode(mode) {
   viewMode = mode;
   document.body.dataset.viewMode = mode;
@@ -1700,7 +1486,6 @@ function initViewMode() {
   applyViewMode(saved);
 }
 
-// ====== Focus mode ======
 function toggleFocusMode() {
   const on = document.body.classList.toggle('focus-mode');
   if (on) {
@@ -1718,7 +1503,6 @@ function toggleFocusMode() {
   }
 }
 
-// ====== Density ======
 function applyDensity(density) {
   const btns = $$('#density-toggle button');
   btns.forEach(x => x.classList.toggle('active', x.dataset.density === density));
@@ -1739,12 +1523,10 @@ function initDensity() {
   applyDensity(saved);
 }
 
-// ====== Sidebar ======
 function initSidebar() {
   let state = 'expanded';
   try { state = localStorage.getItem(STORAGE_KEYS.sidebar) || 'expanded'; } catch {}
   document.body.dataset.sidebar = state;
-
   const collapse = $('sidebar-collapse');
   if (collapse) {
     collapse.onclick = () => {
@@ -1769,12 +1551,9 @@ function initSidebar() {
   }
 }
 function closeMobileSidebar() {
-  if (document.body.dataset.sidebar === 'mobile-open') {
-    document.body.dataset.sidebar = 'expanded';
-  }
+  if (document.body.dataset.sidebar === 'mobile-open') document.body.dataset.sidebar = 'expanded';
 }
 
-// ====== URL state ======
 function pushURLState(extra = {}) {
   const params = new URLSearchParams();
   const q = $('search-input').value.trim();
@@ -1801,7 +1580,6 @@ function readURLState() {
   if (q) setTimeout(() => startScrape(), 200);
 }
 
-// ====== Suggestions ======
 function initSuggestions() {
   const sugList = $('suggest-list');
   const input = $('search-input');
@@ -1897,11 +1675,7 @@ function initCommandPalette() {
   if (cpBackdrop) cpBackdrop.addEventListener('click', closeCP);
   const kbdTrigger = $('search-kbd');
   if (kbdTrigger) {
-    kbdTrigger.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openCP();
-    });
+    kbdTrigger.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openCP(); });
   }
   cpInput.addEventListener('input', () => renderCP(cpInput.value));
   cpInput.addEventListener('keydown', (e) => {
@@ -1917,7 +1691,6 @@ function initKeyboard() {
     const tag = (document.activeElement || {}).tagName;
     const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     const mod = e.metaKey || e.ctrlKey;
-
     if (mod && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       const cp = $('command-palette');
@@ -1931,9 +1704,7 @@ function initKeyboard() {
       try { localStorage.setItem(STORAGE_KEYS.sidebar, next); } catch {}
       return;
     }
-
     if (isInput) return;
-
     if (e.key === '/') { e.preventDefault(); $('search-input').focus(); return; }
     if (e.key === '?') { e.preventDefault(); openShortcuts(); return; }
     if (e.key === 'Escape') {
@@ -2000,19 +1771,12 @@ function closeShortcuts() {
   $('shortcuts-overlay').setAttribute('aria-hidden', 'true');
 }
 
-// ====== Wire Events ======
 function wireEvents() {
   const searchForm = $('search-form');
   if (searchForm) {
-    searchForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      startScrape();
-    });
+    searchForm.addEventListener('submit', (e) => { e.preventDefault(); startScrape(); });
   }
-  $('settings-btn').addEventListener('click', () => {
-    syncDrawerFromSettings();
-    openDrawer(true);
-  });
+  $('settings-btn').addEventListener('click', () => { syncDrawerFromSettings(); openDrawer(true); });
   $('close-settings').addEventListener('click', () => openDrawer(false));
   $('overlay').addEventListener('click', () => openDrawer(false));
   $('reset-settings').addEventListener('click', () => {
@@ -2026,7 +1790,6 @@ function wireEvents() {
     drawer.addEventListener('input', readDrawerToSettings);
     drawer.addEventListener('change', readDrawerToSettings);
   }
-
   $$('.nav-btn-main').forEach(b => {
     b.addEventListener('click', () => {
       const nav = b.dataset.nav;
@@ -2048,12 +1811,8 @@ function wireEvents() {
   $('focus-toggle')?.addEventListener('click', toggleFocusMode);
   $('shortcuts-btn')?.addEventListener('click', openShortcuts);
   $('shortcuts-close')?.addEventListener('click', closeShortcuts);
-  $('shortcuts-overlay')?.addEventListener('click', (e) => {
-    if (e.target.id === 'shortcuts-overlay') closeShortcuts();
-  });
-
+  $('shortcuts-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'shortcuts-overlay') closeShortcuts(); });
   $$('[data-close-panel]').forEach(b => b.addEventListener('click', closeAllPanels));
-
   $$('.filter-chip').forEach(ch => {
     ch.addEventListener('click', () => {
       const f = ch.dataset.filter;
@@ -2063,7 +1822,6 @@ function wireEvents() {
       pushURLState();
     });
   });
-
   $('sort-trigger')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const menu = $('sort-menu');
@@ -2082,16 +1840,10 @@ function wireEvents() {
     if (!e.target.closest('#sort-dropdown')) closeSortMenu();
     if (!e.target.closest('#context-menu')) closeContextMenu();
   });
-
   $$('#view-modes button').forEach(b => {
-    b.addEventListener('click', () => {
-      applyViewMode(b.dataset.mode);
-      pushURLState();
-    });
+    b.addEventListener('click', () => { applyViewMode(b.dataset.mode); pushURLState(); });
   });
-
   $('bulk-toggle')?.addEventListener('click', () => setSelectionMode(!selectionMode));
-
   $('cancel-btn').addEventListener('click', async () => {
     if (currentJob) {
       const btn = $('cancel-btn');
@@ -2100,20 +1852,13 @@ function wireEvents() {
       try { await fetch(`/api/jobs/${currentJob}/cancel`, { method: 'POST' }); } catch {}
     }
   });
-
   $('close-pin-modal').addEventListener('click', closePinModal);
   $('pm-prev').addEventListener('click', () => pmNav(-1));
   $('pm-next').addEventListener('click', () => pmNav(1));
-  $('pin-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'pin-modal') closePinModal();
-  });
+  $('pin-modal').addEventListener('click', (e) => { if (e.target.id === 'pin-modal') closePinModal(); });
   const pmImg = $('pm-img');
-  if (pmImg) {
-    pmImg.addEventListener('click', (e) => { e.stopPropagation(); pmImg.classList.toggle('zoomed'); });
-  }
-
+  if (pmImg) pmImg.addEventListener('click', (e) => { e.stopPropagation(); pmImg.classList.toggle('zoomed'); });
   $('detail-close')?.addEventListener('click', closePinDetail);
-
   $('sel-cancel').addEventListener('click', () => setSelectionMode(false));
   $('sel-download')?.addEventListener('click', bulkDownloadSelected);
   $('sel-collection')?.addEventListener('click', bulkSaveToCollection);
@@ -2138,15 +1883,9 @@ function wireEvents() {
       allPins = allPins.filter(p => !p.local_file || !deletedSet.has(p.local_file));
       window._lastPins = lastPins;
       addHistory({ type: 'delete', count: deleted });
-
       setSelectionMode(false);
       await updateGalleryBadge();
-      window.showToast(`${deleted} image${deleted === 1 ? '' : 's'} deleted`, 'success', 6000, {
-        label: 'Undo',
-        onClick: () => {
-          window.showToast('File already deleted from disk', 'info', 2400);
-        },
-      });
+      window.showToast(`${deleted} image${deleted === 1 ? '' : 's'} deleted`, 'success');
       $('stats-card').innerHTML = `
         <div class="stats-header">
           <span class="stats-title"><i class="bi bi-trash3"></i> ${deleted} images deleted</span>
@@ -2155,13 +1894,9 @@ function wireEvents() {
       $('stats-card').classList.remove('hidden');
       $('export-bar').classList.add('hidden');
       if (!document.querySelector('.pin-card')) $('empty').classList.remove('hidden');
-    } finally {
-      deleteBtn.disabled = false;
-    }
+    } finally { deleteBtn.disabled = false; }
   });
-
   $('sch-add')?.addEventListener('click', addSchedule);
-
   $('col-add')?.addEventListener('click', () => {
     const name = $('col-name').value.trim();
     if (!name) { window.showError('Enter a name'); return; }
@@ -2171,9 +1906,7 @@ function wireEvents() {
     $('col-name').value = '';
     window.showToast(`Collection "${name}" created`, 'success');
   });
-
   $('history-clear')?.addEventListener('click', clearHistory);
-
   document.addEventListener('pointerdown', (e) => {
     const card = e.target.closest('.pin-card');
     if (!card || selectionMode) return;
@@ -2194,11 +1927,7 @@ function wireEvents() {
     }, true)
   );
   document.addEventListener('click', (e) => {
-    if (Date.now() < suppressClickUntil) {
-      e.stopPropagation();
-      e.preventDefault();
-      return;
-    }
+    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); return; }
     if (!selectionMode) return;
     const card = e.target.closest('.pin-card');
     if (!card) return;
@@ -2206,13 +1935,9 @@ function wireEvents() {
     e.preventDefault();
     toggleSelect(card);
   }, true);
-
-  const _io = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) loadMore();
-  }, { rootMargin: '600px' });
+  const _io = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) loadMore(); }, { rootMargin: '600px' });
   const _sentinel = document.getElementById('scroll-sentinel');
   if (_sentinel) _io.observe(_sentinel);
-
   const hero = $('hero');
   const grid = $('grid');
   if (hero && grid) {
@@ -2222,16 +1947,12 @@ function wireEvents() {
     });
     observer.observe(grid, { childList: true });
   }
-
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') {
-      document.body.dataset.sidebar = 'expanded';
-    }
+    if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') document.body.dataset.sidebar = 'expanded';
   });
   window.addEventListener('orientationchange', () => {
     setTimeout(() => { if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') document.body.dataset.sidebar = 'expanded'; }, 200);
   });
-
   initKeyboard();
   readURLState();
 }
@@ -2265,8 +1986,5 @@ function init() {
   }
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
