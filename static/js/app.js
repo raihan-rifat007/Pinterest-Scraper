@@ -45,8 +45,6 @@ let progressStartTime = 0;
 let lastProgressUpdate = 0;
 let lastProgressCount = 0;
 
-let undoBuffer = null;
-
 const STORAGE_KEYS = {
   settings: 'ps_settings',
   density: 'ps_density',
@@ -193,7 +191,7 @@ function clearHistory() {
   window.showToast('History cleared', 'success');
 }
 
-// ====== Recent searches (legacy + sidebar) ======
+// ====== Recent searches ======
 function getRecent() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.recent) || '[]'); }
   catch { return []; }
@@ -362,7 +360,6 @@ function updateRate(count) {
     lastProgressUpdate = now;
     lastProgressCount = count;
   }
-  // ETA
   const etaEl = $('progress-eta');
   if (etaEl && currentPhase && phaseState[currentPhase]) {
     const st = phaseState[currentPhase];
@@ -400,6 +397,7 @@ async function finishJob(ev) {
     const data = await res.json();
     lastPins = data.pins || [];
     window._lastPins = lastPins;
+    allPins = lastPins;
     renderStats(ev);
     const hasImages = lastPins.some(p => p.local_file);
     if (!lastPins.length) {
@@ -549,7 +547,7 @@ function sortPins(pins, sort) {
 }
 
 function applyFilterAndSort() {
-  let pins = allPins;
+  let pins = allPins.slice();
   if (activeFilter !== 'all') {
     pins = pins.filter(p => pinMatchesFilter(p, activeFilter));
   }
@@ -603,7 +601,7 @@ function updateSortLabel() {
   });
 }
 
-// ====== Grid rendering ======
+// ====== Grid rendering (FIXED) ======
 function pinResolutionBadge(pin) {
   if (!pin.width || !pin.height) return '';
   const min = Math.min(pin.width, pin.height);
@@ -642,11 +640,15 @@ function renderGrid(pins, incremental) {
     if (selectedFiles.has(pin.local_file)) card.classList.add('selected');
     card.style.animationDelay = `${Math.min(i * 0.03, 0.6)}s`;
 
+    const aspect = pin.width && pin.height ? (pin.width + '/' + pin.height) : null;
     const imgBlock = src
       ? `<img class="pin-img" loading="lazy" src="${src}"
             alt="${escapeHtml(pin.title || pin.pin_id)}"
-            onerror="this.onerror=null;this.src='${escapeHtml(pin.image_url || '')}'"
-            style="aspect-ratio:${pin.width && pin.height ? pin.width + '/' + pin.height : 'auto'}">`
+            referrerpolicy="no-referrer"
+            decoding="async"
+            ${pin.width ? `width="${pin.width}"` : ''}
+            ${pin.height ? `height="${pin.height}"` : ''}
+            ${aspect ? `style="aspect-ratio:${aspect}"` : ''}>`
       : `<div class="pin-no-img"><i class="bi bi-image"></i></div>`;
 
     const badges = [
@@ -688,10 +690,32 @@ function renderGrid(pins, incremental) {
         </div>
       </div>`;
 
+    // FIXED: robust image load/error handling with timeout fallback
     const imgEl = card.querySelector('.pin-img');
     if (imgEl) {
-      if (imgEl.complete && imgEl.naturalWidth) imgEl.classList.add('img-loaded');
-      else imgEl.addEventListener('load', () => imgEl.classList.add('img-loaded'), { once: true });
+      let settled = false;
+      const settle = (ok) => {
+        if (settled) return;
+        settled = true;
+        imgEl.classList.add(ok ? 'img-loaded' : 'img-failed');
+      };
+
+      if (imgEl.complete) {
+        settle(imgEl.naturalWidth > 0);
+      } else {
+        imgEl.addEventListener('load', () => settle(true), { once: true });
+        imgEl.addEventListener('error', () => {
+          const fallback = pin.image_url || '';
+          if (fallback && imgEl.src !== fallback && !imgEl.dataset.triedFallback) {
+            imgEl.dataset.triedFallback = '1';
+            imgEl.src = fallback;
+          } else {
+            settle(false);
+          }
+        });
+        // safety: after 8s force-visible so it never stays blank
+        setTimeout(() => settle(imgEl.naturalWidth > 0), 8000);
+      }
     }
 
     card.addEventListener('click', (e) => {
@@ -734,7 +758,6 @@ function quickSaveToCollection(pin) {
     openCollectionsPanel();
     return;
   }
-  // Simple prompt-less: save to first collection
   const target = cols[0];
   if (!target.pins) target.pins = [];
   if (!target.pins.includes(pin.pin_id)) {
@@ -880,13 +903,13 @@ function showSearch() {
   renderRecent();
 }
 
+// FIXED: resetFeed no longer overwrites allPins
 function resetFeed(pins) {
-  allPins = pins || allPins;
   lastPins = pins || lastPins;
   window._lastPins = lastPins;
   renderedCount = 0;
-  renderGrid(pins.slice(0, PAGE_SIZE));
-  renderedCount = Math.min(PAGE_SIZE, pins.length);
+  renderGrid(lastPins.slice(0, PAGE_SIZE));
+  renderedCount = Math.min(PAGE_SIZE, lastPins.length);
 }
 
 function loadMore() {
@@ -914,7 +937,6 @@ function openPinDetail(pin) {
   const pins = filteredPins.length ? filteredPins : (window._lastPins || lastPins || []);
   const idx = pins.findIndex(p => p.pin_id === pin.pin_id);
   if (idx < 0) return;
-  // On narrow screens use modal
   if (window.innerWidth < 1024) {
     openPinModal(pin);
     return;
@@ -925,7 +947,6 @@ function openPinDetail(pin) {
   const panel = $('pin-detail');
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
-  // Highlight selected card
   document.querySelectorAll('.pin-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.pinId === pin.pin_id);
   });
@@ -955,7 +976,7 @@ function renderPinDetail(pins, idx) {
   if (isVideo) {
     imageHTML = `<video src="${escapeHtml(pin.video_url)}" muted loop playsinline controls autoplay></video>`;
   } else {
-    imageHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(pin.title || '')}"
+    imageHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(pin.title || '')}" referrerpolicy="no-referrer"
       onerror="this.onerror=null;this.src='${escapeHtml(pin.image_url || '')}'">`;
   }
 
@@ -999,7 +1020,6 @@ function renderPinDetail(pins, idx) {
       </div>
     </div>`;
 
-  // Wire colors
   $('detail-body').querySelectorAll('.color-chip').forEach(c => {
     c.onclick = () => {
       navigator.clipboard?.writeText(c.dataset.color);
@@ -1740,7 +1760,6 @@ function initSidebar() {
       document.body.dataset.sidebar = open ? 'expanded' : 'mobile-open';
     };
   }
-  // Mobile overlay
   let mo = document.querySelector('.mobile-overlay');
   if (!mo) {
     mo = document.createElement('div');
@@ -1782,7 +1801,7 @@ function readURLState() {
   if (q) setTimeout(() => startScrape(), 200);
 }
 
-// ====== Events ======
+// ====== Suggestions ======
 function initSuggestions() {
   const sugList = $('suggest-list');
   const input = $('search-input');
@@ -1899,14 +1918,12 @@ function initKeyboard() {
     const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     const mod = e.metaKey || e.ctrlKey;
 
-    // Cmd/Ctrl+K
     if (mod && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       const cp = $('command-palette');
       if (cp.classList.contains('open')) closeCP(); else openCP();
       return;
     }
-    // Cmd/Ctrl+B - toggle sidebar
     if (mod && e.key.toLowerCase() === 'b') {
       e.preventDefault();
       const next = document.body.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
@@ -1917,11 +1934,8 @@ function initKeyboard() {
 
     if (isInput) return;
 
-    // /
     if (e.key === '/') { e.preventDefault(); $('search-input').focus(); return; }
-    // ?
     if (e.key === '?') { e.preventDefault(); openShortcuts(); return; }
-    // Escape
     if (e.key === 'Escape') {
       const cp = $('command-palette');
       const drawer = $('settings-drawer');
@@ -1936,16 +1950,13 @@ function initKeyboard() {
       if (selectionMode) { setSelectionMode(false); return; }
       if (document.body.classList.contains('focus-mode')) { toggleFocusMode(); return; }
     }
-    // F - focus mode
     if (e.key.toLowerCase() === 'f' && !mod) {
-      // Only if no modal open
       if (!$('pin-modal').classList.contains('open') && !$('command-palette').classList.contains('open')) {
         e.preventDefault();
         toggleFocusMode();
       }
       return;
     }
-    // S - toggle sidebar
     if (e.key.toLowerCase() === 's' && !mod) {
       if (!$('pin-modal').classList.contains('open')) {
         e.preventDefault();
@@ -1955,15 +1966,11 @@ function initKeyboard() {
       }
       return;
     }
-    // G - gallery
     if (e.key.toLowerCase() === 'g') { e.preventDefault(); showGallery(); return; }
-    // D - dark
     if (e.key.toLowerCase() === 'd') { e.preventDefault(); $('theme-btn').click(); return; }
-    // 1/2/3 - view mode
     if (e.key === '1') { e.preventDefault(); applyViewMode('masonry'); return; }
     if (e.key === '2') { e.preventDefault(); applyViewMode('grid'); return; }
     if (e.key === '3') { e.preventDefault(); applyViewMode('list'); return; }
-    // 0 - reset filters
     if (e.key === '0') {
       e.preventDefault();
       activeFilter = 'all'; activeSort = 'newest';
@@ -1972,15 +1979,14 @@ function initKeyboard() {
       window.showToast('Filters cleared', 'info', 1500);
       return;
     }
-    // Arrows in modal
     const modal = $('pin-modal');
     if (modal.classList.contains('open')) {
       if (e.key === 'ArrowLeft') pmNav(-1);
       if (e.key === 'ArrowRight') pmNav(1);
     } else if ($('pin-detail').classList.contains('open')) {
       const pins = filteredPins;
-      if (e.key === 'ArrowLeft') { renderPinDetail(pins, pmIndex - 1); pmIndex = Math.max(0, pmIndex - 1); }
-      if (e.key === 'ArrowRight') { renderPinDetail(pins, pmIndex + 1); pmIndex = Math.min(pins.length - 1, pmIndex + 1); }
+      if (e.key === 'ArrowLeft') { pmIndex = Math.max(0, pmIndex - 1); renderPinDetail(pins, pmIndex); }
+      if (e.key === 'ArrowRight') { pmIndex = Math.min(pins.length - 1, pmIndex + 1); renderPinDetail(pins, pmIndex); }
     }
   });
 }
@@ -2021,7 +2027,6 @@ function wireEvents() {
     drawer.addEventListener('change', readDrawerToSettings);
   }
 
-  // Sidebar nav
   $$('.nav-btn-main').forEach(b => {
     b.addEventListener('click', () => {
       const nav = b.dataset.nav;
@@ -2047,10 +2052,8 @@ function wireEvents() {
     if (e.target.id === 'shortcuts-overlay') closeShortcuts();
   });
 
-  // Side panels close buttons
   $$('[data-close-panel]').forEach(b => b.addEventListener('click', closeAllPanels));
 
-  // Filter chips
   $$('.filter-chip').forEach(ch => {
     ch.addEventListener('click', () => {
       const f = ch.dataset.filter;
@@ -2061,7 +2064,6 @@ function wireEvents() {
     });
   });
 
-  // Sort dropdown
   $('sort-trigger')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const menu = $('sort-menu');
@@ -2081,7 +2083,6 @@ function wireEvents() {
     if (!e.target.closest('#context-menu')) closeContextMenu();
   });
 
-  // View modes
   $$('#view-modes button').forEach(b => {
     b.addEventListener('click', () => {
       applyViewMode(b.dataset.mode);
@@ -2089,10 +2090,8 @@ function wireEvents() {
     });
   });
 
-  // Bulk toggle
   $('bulk-toggle')?.addEventListener('click', () => setSelectionMode(!selectionMode));
 
-  // Cancel scrape
   $('cancel-btn').addEventListener('click', async () => {
     if (currentJob) {
       const btn = $('cancel-btn');
@@ -2102,7 +2101,6 @@ function wireEvents() {
     }
   });
 
-  // Pin modal
   $('close-pin-modal').addEventListener('click', closePinModal);
   $('pm-prev').addEventListener('click', () => pmNav(-1));
   $('pm-next').addEventListener('click', () => pmNav(1));
@@ -2114,10 +2112,8 @@ function wireEvents() {
     pmImg.addEventListener('click', (e) => { e.stopPropagation(); pmImg.classList.toggle('zoomed'); });
   }
 
-  // Pin detail
   $('detail-close')?.addEventListener('click', closePinDetail);
 
-  // Selection bar
   $('sel-cancel').addEventListener('click', () => setSelectionMode(false));
   $('sel-download')?.addEventListener('click', bulkDownloadSelected);
   $('sel-collection')?.addEventListener('click', bulkSaveToCollection);
@@ -2138,21 +2134,16 @@ function wireEvents() {
       await new Promise(r => setTimeout(r, 320));
       selectedCards.forEach(c => c.remove());
       const deletedSet = new Set(toDelete);
-      const removedPins = lastPins.filter(p => p.local_file && deletedSet.has(p.local_file));
       lastPins = lastPins.filter(p => !p.local_file || !deletedSet.has(p.local_file));
       allPins = allPins.filter(p => !p.local_file || !deletedSet.has(p.local_file));
       window._lastPins = lastPins;
       addHistory({ type: 'delete', count: deleted });
 
-      // Undo
-      const snapshot = [...removedPins];
       setSelectionMode(false);
       await updateGalleryBadge();
       window.showToast(`${deleted} image${deleted === 1 ? '' : 's'} deleted`, 'success', 6000, {
         label: 'Undo',
         onClick: () => {
-          // Note: Undo just restores UI state; actual file deletion cannot be reverted server-side.
-          // We keep it as informational.
           window.showToast('File already deleted from disk', 'info', 2400);
         },
       });
@@ -2169,10 +2160,8 @@ function wireEvents() {
     }
   });
 
-  // Schedules
   $('sch-add')?.addEventListener('click', addSchedule);
 
-  // Collections
   $('col-add')?.addEventListener('click', () => {
     const name = $('col-name').value.trim();
     if (!name) { window.showError('Enter a name'); return; }
@@ -2183,10 +2172,8 @@ function wireEvents() {
     window.showToast(`Collection "${name}" created`, 'success');
   });
 
-  // History
   $('history-clear')?.addEventListener('click', clearHistory);
 
-  // Long-press select on cards
   document.addEventListener('pointerdown', (e) => {
     const card = e.target.closest('.pin-card');
     if (!card || selectionMode) return;
@@ -2220,14 +2207,12 @@ function wireEvents() {
     toggleSelect(card);
   }, true);
 
-  // Infinite scroll
   const _io = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) loadMore();
   }, { rootMargin: '600px' });
   const _sentinel = document.getElementById('scroll-sentinel');
   if (_sentinel) _io.observe(_sentinel);
 
-  // Auto-hide hero when grid has cards
   const hero = $('hero');
   const grid = $('grid');
   if (hero && grid) {
@@ -2247,14 +2232,10 @@ function wireEvents() {
     setTimeout(() => { if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') document.body.dataset.sidebar = 'expanded'; }, 200);
   });
 
-  // Keyboard
   initKeyboard();
-
-  // URL state on load
   readURLState();
 }
 
-// ====== Init ======
 function init() {
   syncDrawerFromSettings();
   updateGalleryBadge();
