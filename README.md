@@ -4,7 +4,7 @@
 
 <br />
 
-<a href="https://test-g9v5.onrender.com">
+<a href="https://pinterestscraperr.onrender.com?q=taylor+swift&filter=video">
   <img src="https://img.shields.io/badge/Live%20Demo-test--g9v5.onrender.com-E60023?style=for-the-badge&logo=render&logoColor=white&labelColor=000000" alt="Live Demo" />
 </a>
 
@@ -25,8 +25,8 @@
 
 <br /><br />
 
-<a href="https://github.com/raihan-rifat007/T/stargazers"><img src="https://img.shields.io/github/stars/raihan-rifat007/T?style=social" /></a>
-<a href="https://github.com/raihan-rifat007/T/network/members"><img src="https://img.shields.io/github/forks/raihan-rifat007/T?style=social" /></a>
+<a href="https://github.com/raihan-rifat007/Pinterest-Scraper/stargazers"><img src="https://img.shields.io/github/stars/raihan-rifat007/Pinterest-Scraper?style=social" /></a>
+<a href="https://github.com/raihan-rifat007/Pinterest-Scraper/network/members"><img src="https://img.shields.io/github/forks/raihan-rifat007/Pinterest-Scraper?style=social" /></a>
 
 <br /><br />
 
@@ -35,7 +35,7 @@ Search · Board scrape · Download · Deduplicate · Export — all from one int
 
 <br />
 
-[Getting Started](#-quick-start) · [Report Bug](https://github.com/raihan-rifat007/T/issues) · [Request Feature](https://github.com/raihan-rifat007/T/issues)
+[Getting Started](#-quick-start) · [Report Bug](https://github.com/raihan-rifat007/Pinterest-Scraper/issues) · [Request Feature](https://github.com/raihan-rifat007/Pinterest-Scraper/issues)
 
 </div>
 
@@ -210,16 +210,6 @@ Search · Board scrape · Download · Deduplicate · Export — all from one int
 </td>
 </tr>
 <tr>
-<td align="center" width="50%">
-
-### 📚 Gallery
-<a href="docs/Gallery.png">
-  <img src="docs/Gallery.png" width="100%" alt="Gallery" />
-</a>
-
-<sub>All downloaded images with batch actions</sub>
-
-</td>
 <td align="center" width="50%">
 
 ### 📖 API Docs
@@ -428,7 +418,7 @@ Step-by-step:
 
 ```bash
 # 1. Clone
-git clone https://github.com/raihan-rifat007/T.git
+git clone https://github.com/raihan-rifat007/Pinterest-Scraper.git
 cd T
 
 # 2. Create virtual environment
@@ -884,4 +874,371 @@ uvicorn api.server:app \
   --workers 1 \
   --log-level warning
 ```
+Recommended: Put Nginx in front for TLS + static caching. Use systemd or supervisor for process management.
 
+<details>
+<summary><b>systemd unit example</b></summary>
+
+<br />
+
+```ini
+[Unit]
+Description=Pinterest Scraper
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/pinterest-scraper
+ExecStart=/opt/pinterest-scraper/.venv/bin/uvicorn api.server:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+</details>
+
+<br />
+
+---
+
+🛠️ Tech Stack
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="120"><b>Backend</b></td>
+<td>
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+<img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+<img src="https://img.shields.io/badge/Uvicorn-499848?style=for-the-badge&logo=gunicorn&logoColor=white" />
+<img src="https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white" />
+</td>
+</tr>
+<tr>
+<td align="center"><b>Networking</b></td>
+<td>
+<img src="https://img.shields.io/badge/requests-2B2D30?style=for-the-badge&logo=python&logoColor=white" />
+<img src="https://img.shields.io/badge/ThreadPool-FF6B6B?style=for-the-badge" />
+<img src="https://img.shields.io/badge/SSE-4B5563?style=for-the-badge" />
+</td>
+</tr>
+<tr>
+<td align="center"><b>Export</b></td>
+<td>
+<img src="https://img.shields.io/badge/openpyxl-217346?style=for-the-badge&logo=microsoft-excel&logoColor=white" />
+<img src="https://img.shields.io/badge/ZIP-6B7280?style=for-the-badge" />
+<img src="https://img.shields.io/badge/CSV-FFB000?style=for-the-badge" />
+</td>
+</tr>
+<tr>
+<td align="center"><b>Frontend</b></td>
+<td>
+<img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" />
+<img src="https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white" />
+<img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white" />
+<img src="https://img.shields.io/badge/Bootstrap%20Icons-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" />
+</td>
+</tr>
+<tr>
+<td align="center"><b>Deployment</b></td>
+<td>
+<img src="https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white" />
+<img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
+<img src="https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white" />
+</td>
+</tr>
+</table>
+
+</div>
+
+<br />
+
+---
+
+📊 Metadata Fields
+
+Every pin object returned by the API contains 25+ fields:
+
+<div align="center">
+
+Category Fields
+Identity pin_id · pin_url
+Content title · description · alt_text
+Media image_url · width · height · aspect_ratio
+Engagement saves · repin_count · likes · comments
+Creator creator_username · creator_name · creator_profile
+Board board_name · board_url
+External external_link · domain
+Visual dominant_color
+Temporal created_at
+Video is_video · video_url
+Local local_file
+
+</div>
+
+<br />
+
+<details>
+<summary><b>📄 Full field reference</b></summary>
+
+<br />
+
+Field Type Description
+pin_id string Pinterest pin ID
+pin_url string Full Pinterest URL
+title string Pin title
+description string Pin description
+alt_text string Auto-generated alt text
+image_url string Highest-resolution image URL
+width int Image width in px
+height int Image height in px
+aspect_ratio float width / height
+saves int Total saves
+repin_count int Repin count
+likes int Like count
+comments int Comment count
+creator_username string Pinterest username
+creator_name string Display name
+creator_profile string Profile URL
+board_name string Board name
+board_url string Board URL
+external_link string External link on pin
+domain string External link domain
+dominant_color string Hex color code
+created_at string ISO creation timestamp
+is_video bool True if video pin
+video_url string Direct MP4 URL (if video)
+local_file string Downloaded filename (if saved)
+
+</details>
+
+<br />
+
+---
+
+🗺️ Roadmap
+
+<div align="center">
+
+<table>
+<tr>
+<th align="center" width="60">Status</th>
+<th align="left">Feature</th>
+<th align="left">ETA</th>
+</tr>
+<tr>
+<td align="center">✅</td>
+<td>Search + board scraping</td>
+<td><sub>Shipped</sub></td>
+</tr>
+<tr>
+<td align="center">✅</td>
+<td>Premium web UI + dark mode</td>
+<td><sub>Shipped</sub></td>
+</tr>
+<tr>
+<td align="center">✅</td>
+<td>SSE live progress</td>
+<td><sub>Shipped</sub></td>
+</tr>
+<tr>
+<td align="center">✅</td>
+<td>ZIP + XLSX export</td>
+<td><sub>Shipped</sub></td>
+</tr>
+<tr>
+<td align="center">✅</td>
+<td>Scheduled scrapes + collections</td>
+<td><sub>Shipped</sub></td>
+</tr>
+<tr>
+<td align="center">🚧</td>
+<td>Multi-language SDK (JS · Python · Go)</td>
+<td><sub>Q1 2026</sub></td>
+</tr>
+<tr>
+<td align="center">🚧</td>
+<td>PostgreSQL backend for persistent storage</td>
+<td><sub>Q1 2026</sub></td>
+</tr>
+<tr>
+<td align="center">📋</td>
+<td>Webhook notifications on job completion</td>
+<td><sub>Q2 2026</sub></td>
+</tr>
+<tr>
+<td align="center">📋</td>
+<td>Bulk board scraping via CSV input</td>
+<td><sub>Q2 2026</sub></td>
+</tr>
+<tr>
+<td align="center">💡</td>
+<td>AI-powered pin description generation</td>
+<td><sub>Backlog</sub></td>
+</tr>
+</table>
+
+</div>
+
+<br />
+
+---
+
+🤝 Contributing
+
+<div align="center">
+
+Contributions, issues, and feature requests are welcome!
+
+</div>
+
+<br />
+
+<table>
+<tr>
+<td width="33%" align="center">
+
+🍴 Fork
+
+Fork the repository
+
+</td>
+<td width="33%" align="center">
+
+🌿 Branch
+
+git checkout -b feat/amazing
+
+</td>
+<td width="33%" align="center">
+
+🚀 Push
+
+git push origin feat/amazing
+
+</td>
+</tr>
+</table>
+
+<br />
+
+```bash
+# 1. Fork & clone
+git clone https://github.com/YOUR_USERNAME/T.git
+
+# 2. Create feature branch
+git checkout -b feat/amazing-feature
+
+# 3. Commit changes
+git commit -m "feat: add amazing feature"
+
+# 4. Push
+git push origin feat/amazing-feature
+
+# 5. Open a Pull Request
+```
+
+<br />
+
+<div align="center">
+
+📏 Commit Convention
+
+Prefix Usage
+feat: New feature
+fix: Bug fix
+docs: Documentation
+refactor: Code refactor
+perf: Performance
+chore: Maintenance
+
+</div>
+
+<br />
+
+---
+
+📈 Star History
+
+<div align="center">
+
+<a href="https://star-history.com/#raihan-rifat007/T&Date">
+  <img src="https://api.star-history.com/svg?repos=raihan-rifat007/T&type=Date" alt="Star History Chart" width="600" />
+</a>
+
+<br /><br />
+
+If this project helped you, please consider giving it a ⭐
+
+<a href="https://github.com/raihan-rifat007/T/stargazers">
+  <img src="https://img.shields.io/github/stars/raihan-rifat007/T?style=for-the-badge&logo=github&color=E60023&labelColor=000000" alt="Star this repo" />
+</a>
+
+</div>
+
+<br />
+
+---
+
+⚖️ License
+
+<div align="center">
+
+MIT License
+
+Copyright © 2026 Raihan Rifat
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files, to deal in the Software without restriction — including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies.
+
+See the LICENSE file for full text.
+
+</div>
+
+<br />
+
+---
+
+⚠️ Disclaimer
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center">
+<br />
+<b>⚖️ Please read before use</b>
+<br /><br />
+This project is intended for <b>personal, educational, and research use only</b>.<br />
+Respect Pinterest's <a href="https://policy.pinterest.com/en/terms-of-service">Terms of Service</a> and <code>robots.txt</code>.<br />
+Do not use at scale or for commercial scraping without explicit permission.
+<br /><br />
+</td>
+</tr>
+</table>
+
+</div>
+
+<br />
+
+---
+
+<div align="center">
+
+💝 Credits
+
+Built with <img src="https://img.shields.io/badge/-%E2%9D%A4-E60023?style=flat-square" /> using Python · FastAPI · Vanilla JS
+
+<br />
+
+<a href="https://github.com/raihan-rifat007/Pinterest-Scraper/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=raihan-rifat007/T" alt="Contributors" />
+</a>
+
+<br /><br />
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,2,5,30&height=120&section=footer&text=Thank%20you%20for%20visiting&fontSize=20&fontColor=ffffff&animation=fadeIn" width="100%" />
+
+</div>
