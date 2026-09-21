@@ -1,0 +1,30 @@
+name: Rewrite All Commits as raihan07
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Rewrite all commits with raihan07
+        run: |
+          git config user.name "raihan-rifat007"
+          git config user.email "raihan-rifat007@users.noreply.github.com"
+          
+          # Rewrite all commit messages
+          git filter-branch -f --msg-filter \
+            'echo "Upgradeeeeeeeeeeee to next level"' \
+            -- --all
+          
+          # Force push
+          git push --force
