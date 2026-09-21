@@ -652,7 +652,7 @@ done status, total, stats, error Job completed
 
 ```bash
 # Start a scrape
-curl -X POST https://test-g9v5.onrender.com/api/scrape \
+curl -X POST https://pinterestscraperr.onrender.com/api/scrape \
   -H "Content-Type: application/json" \
   -d '{
     "query": "minimal wallpaper",
@@ -664,10 +664,10 @@ curl -X POST https://test-g9v5.onrender.com/api/scrape \
 # → {"job_id": "abc123def456"}
 
 # Stream progress (SSE)
-curl -N https://test-g9v5.onrender.com/api/jobs/abc123def456/events
+curl -N https://pinterestscraperr.onrender.com/api/jobs/abc123def456/events
 
 # Fetch final result
-curl https://test-g9v5.onrender.com/api/jobs/abc123def456/result
+curl https://pinterestscraperr.onrender.com/api/jobs/abc123def456/result
 ```
 
 <br />
@@ -1165,15 +1165,15 @@ chore: Maintenance
 
 <div align="center">
 
-<a href="https://star-history.com/#raihan-rifat007/T&Date">
-  <img src="https://api.star-history.com/svg?repos=raihan-rifat007/T&type=Date" alt="Star History Chart" width="600" />
+<a href="https://star-history.com/#raihan-rifat007/Pinterest-Scraper &Date">
+  <img src="https://api.star-history.com/svg?repos=raihan-rifat007/Pinterest-Scraper&type=Date" alt="Star History Chart" width="600" />
 </a>
 
 <br /><br />
 
 If this project helped you, please consider giving it a ⭐
 
-<a href="https://github.com/raihan-rifat007/T/stargazers">
+<a href="https://github.com/raihan-rifat007/Pinterest-Scraper/stargazers">
   <img src="https://img.shields.io/github/stars/raihan-rifat007/T?style=for-the-badge&logo=github&color=E60023&labelColor=000000" alt="Star this repo" />
 </a>
 
@@ -1234,7 +1234,7 @@ Built with <img src="https://img.shields.io/badge/-%E2%9D%A4-E60023?style=flat-s
 <br />
 
 <a href="https://github.com/raihan-rifat007/Pinterest-Scraper/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=raihan-rifat007/T" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=raihan-rifat007/Pinterest-Scraper" alt="Contributors" />
 </a>
 
 <br /><br />
