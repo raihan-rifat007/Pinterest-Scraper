@@ -9,29 +9,17 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
 <meta name="description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
-
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pinterest Scraper">
 <meta property="og:title" content="Pinterest Scraper — High-quality pin collection">
 <meta property="og:description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
-<meta property="og:url" content="/">
 <meta property="og:image" content="/static/og-image.png">
-<meta property="og:image:secure_url" content="/static/og-image.png">
-<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Pinterest Scraper">
-<meta property="og:locale" content="en_US">
-
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:site" content="@pinterest">
 <meta name="twitter:title" content="Pinterest Scraper — High-quality pin collection">
-<meta name="twitter:description" content="Scrape Pinterest pins with high-quality images, full metadata, batch download, and one-click export to XLSX or ZIP.">
 <meta name="twitter:image" content="/static/og-image.png">
-<meta name="twitter:image:alt" content="Pinterest Scraper">
-
 <title>Pinterest Scraper</title>
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -40,159 +28,265 @@
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
-<body>
+<body data-view-mode="masonry">
 
-<header class="topbar">
-  <a class="logo" href="/" aria-label="Home">
-    <span class="logo-badge"><i class="bi bi-pinterest"></i></span>
-    <span class="logo-name">Scraper</span>
-    <span class="logo-tag">v1.4</span>
-  </a>
+<div class="app-shell">
 
-  <form id="search-form" class="search-box" autocomplete="off">
-    <i class="bi bi-search"></i>
-    <input id="search-input" type="text" placeholder="Search pins, boards, or ideas..." autocomplete="off" spellcheck="false">
-    <button type="button" id="search-clear" class="search-clear" aria-label="Clear">
-      <i class="bi bi-x-lg"></i>
-    </button>
-    <span class="kbd-hint" id="search-kbd">⌘K</span>
-    <ul id="suggest-list" class="suggest-list"></ul>
-  </form>
-
-  <div class="topbar-actions">
-    <button id="shortcuts-btn" class="icon-btn" title="Keyboard shortcuts" aria-label="Shortcuts">
-      <i class="bi bi-question-circle"></i>
-    </button>
-    <button id="theme-btn" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
-      <i id="theme-icon" class="bi bi-moon-stars"></i>
-    </button>
-    <button id="settings-btn" class="icon-btn settings-btn" title="Settings" aria-label="Settings">
-      <i class="bi bi-gear-fill"></i>
-      <span id="status-dot" class="status-dot" title="Server status"></span>
-    </button>
-  </div>
-</header>
-
-<main>
-  <div id="recent-row" class="hero-suggestions hidden" style="margin-bottom: 24px;"></div>
-
-  <section id="hero" class="hero">
-    <div class="hero-eyebrow" id="hero-eyebrow">
-      <span class="dot"></span>
-      <span id="hero-status">Checking status…</span>
+  <aside class="app-sidebar" id="app-sidebar">
+    <div class="sidebar-brand">
+      <a class="brand-link" href="/" aria-label="Home">
+        <span class="brand-badge"><i class="bi bi-pinterest"></i></span>
+        <span class="brand-text">
+          <span class="brand-name">Scraper</span>
+          <span class="brand-tag">v1.4</span>
+        </span>
+      </a>
+      <button class="icon-btn sidebar-collapse" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse">
+        <i class="bi bi-layout-sidebar-inset"></i>
+      </button>
     </div>
-    <h1>Discover. Scrape. <span class="accent">Create.</span></h1>
-    <p>High-quality Pinterest pins with full metadata, batch download, and one-click export to XLSX or ZIP.</p>
-  </section>
 
-  <div class="toolbar">
-    <div class="segmented">
-      <div class="tab-indicator" id="tab-indicator"></div>
-      <button class="tab active" id="tab-search" data-view="search">
+    <nav class="sidebar-nav-main">
+      <button class="nav-btn-main active" data-nav="search">
         <i class="bi bi-search"></i>
         <span>Search</span>
       </button>
-      <button class="tab" id="tab-gallery" data-view="gallery">
+      <button class="nav-btn-main" data-nav="gallery">
         <i class="bi bi-images"></i>
         <span>Gallery</span>
-        <span id="gallery-badge" class="badge">0</span>
+        <span class="nav-badge" id="nav-gallery-count">0</span>
       </button>
+      <button class="nav-btn-main" data-nav="collections">
+        <i class="bi bi-bookmark-heart"></i>
+        <span>Collections</span>
+        <span class="nav-badge" id="nav-collections-count">0</span>
+      </button>
+      <button class="nav-btn-main" data-nav="schedules">
+        <i class="bi bi-clock-history"></i>
+        <span>Schedules</span>
+        <span class="nav-badge" id="nav-schedules-count">0</span>
+      </button>
+      <button class="nav-btn-main" data-nav="history">
+        <i class="bi bi-arrow-counterclockwise"></i>
+        <span>History</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-recent" id="sidebar-recent">
+      <div class="sidebar-section-title">
+        <span>Recent</span>
+        <button class="sidebar-clear" id="clear-recent" title="Clear"><i class="bi bi-x"></i></button>
+      </div>
+      <div id="sidebar-recent-list"></div>
     </div>
 
-    <div class="toolbar-spacer"></div>
-
-    <div class="toolbar-group">
-      <button id="sort-btn" class="tool-btn" title="Sort">
-        <i class="bi bi-sort-down"></i>
-        <span>Newest</span>
+    <div class="sidebar-footer">
+      <button class="sidebar-quick" id="shortcuts-open" title="Keyboard shortcuts (?)">
+        <i class="bi bi-keyboard"></i>
+        <span>Shortcuts</span>
+        <kbd>?</kbd>
       </button>
-      <div class="density-toggle" id="density-toggle" role="group" aria-label="Density">
-        <button type="button" data-density="comfortable" title="Comfortable" aria-label="Comfortable"><i class="bi bi-grid-3x3"></i></button>
-        <button type="button" data-density="default" title="Default" aria-label="Default"><i class="bi bi-grid"></i></button>
-        <button type="button" data-density="compact" title="Compact" aria-label="Compact"><i class="bi bi-grid-3x3-gap"></i></button>
-      </div>
+      <button class="sidebar-quick" id="focus-toggle" title="Focus mode (F)">
+        <i class="bi bi-fullscreen"></i>
+        <span>Focus mode</span>
+        <kbd>F</kbd>
+      </button>
     </div>
-  </div>
+  </aside>
 
-  <section id="progress-card" class="progress-card hidden">
-    <div class="progress-head">
-      <div class="progress-head-left">
-        <div class="spinner"></div>
-        <span id="progress-title">Collecting pins</span>
-      </div>
-      <div class="progress-head-right">
-        <span id="progress-pct" class="progress-pct">0%</span>
-        <button id="cancel-btn" class="btn ghost small">
-          <i class="bi bi-x-circle"></i> Cancel
+  <div class="app-main">
+
+    <header class="topbar">
+      <button class="icon-btn mobile-sidebar-toggle" id="mobile-sidebar-toggle" aria-label="Menu">
+        <i class="bi bi-list"></i>
+      </button>
+
+      <form id="search-form" class="search-box" autocomplete="off">
+        <i class="bi bi-search"></i>
+        <input id="search-input" type="text" placeholder="Search pins, boards, or ideas..." autocomplete="off" spellcheck="false">
+        <button type="button" id="search-clear" class="search-clear" aria-label="Clear">
+          <i class="bi bi-x-lg"></i>
+        </button>
+        <span class="kbd-hint" id="search-kbd">⌘K</span>
+        <ul id="suggest-list" class="suggest-list"></ul>
+      </form>
+
+      <div class="topbar-actions">
+        <button id="shortcuts-btn" class="icon-btn" title="Keyboard shortcuts" aria-label="Shortcuts">
+          <i class="bi bi-question-circle"></i>
+        </button>
+        <button id="theme-btn" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
+          <i id="theme-icon" class="bi bi-moon-stars"></i>
+        </button>
+        <button id="settings-btn" class="icon-btn settings-btn" title="Settings" aria-label="Settings">
+          <i class="bi bi-gear-fill"></i>
+          <span id="status-dot" class="status-dot" title="Server status"></span>
         </button>
       </div>
-    </div>
-    <div class="phase-chips" id="phase-chips">
-      <span class="phase-chip" data-phase="collect">Collect</span>
-      <span class="phase-chip" data-phase="details">Details</span>
-      <span class="phase-chip" data-phase="download">Download</span>
-    </div>
-    <div class="bar"><div id="progress-bar" class="bar-fill"></div></div>
-    <div id="progress-meta" class="progress-meta"></div>
-  </section>
+    </header>
 
-  <section id="stats-card" class="stats-card hidden"></section>
+    <main class="app-content">
 
-  <section id="chart-card" class="chart-card hidden">
-    <h3><i class="bi bi-graph-up-arrow"></i> Engagement insights</h3>
-    <canvas id="chart-canvas" height="100"></canvas>
-  </section>
+      <section id="hero" class="hero">
+        <div class="hero-eyebrow" id="hero-eyebrow">
+          <span class="dot"></span>
+          <span id="hero-status">Checking status…</span>
+        </div>
+        <h1>Discover. Scrape. <span class="accent">Create.</span></h1>
+        <p>High-quality Pinterest pins with full metadata, batch download, and one-click export to XLSX or ZIP.</p>
+        <div id="recent-row" class="hero-suggestions hidden"></div>
+      </section>
 
-  <section id="export-bar" class="export-bar hidden">
-    <a id="exp-zip" class="btn primary" href="#" download>
-      <i class="bi bi-file-zip"></i> Download ZIP
-    </a>
-    <a id="exp-xlsx" class="btn ghost" href="#" download>
-      <i class="bi bi-file-spreadsheet"></i> Export XLSX
-    </a>
-  </section>
+      <div class="view-toolbar" id="view-toolbar">
+        <div class="view-toolbar-left">
+          <div class="filter-bar" id="filter-bar">
+            <button class="filter-chip" data-filter="all" title="All pins"><i class="bi bi-collection"></i> All</button>
+            <button class="filter-chip" data-filter="video" title="Video pins only"><i class="bi bi-play-circle"></i> Video</button>
+            <button class="filter-chip" data-filter="downloaded" title="Downloaded pins"><i class="bi bi-hdd"></i> Downloaded</button>
+            <button class="filter-chip" data-filter="hd" title="High resolution"><i class="bi bi-badge-hd"></i> HD</button>
+            <button class="filter-chip" data-filter="portrait" title="Portrait aspect"><i class="bi bi-aspect-ratio"></i> Portrait</button>
+            <button class="filter-chip" data-filter="landscape" title="Landscape aspect"><i class="bi bi-aspect-ratio"></i> Landscape</button>
+          </div>
+        </div>
 
-  <section id="grid" class="masonry"></section>
-  <div id="scroll-sentinel" class="scroll-sentinel"></div>
+        <div class="view-toolbar-right">
+          <div class="sort-dropdown" id="sort-dropdown">
+            <button class="tool-btn sort-trigger" id="sort-trigger" title="Sort">
+              <i class="bi bi-sort-down"></i>
+              <span id="sort-label">Newest</span>
+              <i class="bi bi-chevron-down sort-caret"></i>
+            </button>
+            <div class="sort-menu hidden" id="sort-menu">
+              <button data-sort="newest"><i class="bi bi-sort-down"></i> Newest first</button>
+              <button data-sort="oldest"><i class="bi bi-sort-up"></i> Oldest first</button>
+              <button data-sort="saves"><i class="bi bi-fire"></i> Most saved</button>
+              <button data-sort="comments"><i class="bi bi-chat-dots"></i> Most commented</button>
+              <button data-sort="resolution"><i class="bi bi-badge-hd"></i> Highest resolution</button>
+              <button data-sort="title"><i class="bi bi-sort-alpha-down"></i> Title A–Z</button>
+            </div>
+          </div>
 
-  <section id="empty" class="empty">
-    <div class="empty-badge" id="empty-icon">
-      <i class="bi bi-stars"></i>
-    </div>
-    <h2 id="empty-title">Find your inspiration</h2>
-    <p id="empty-text">Search for anything and scrape high-quality images with full metadata.</p>
-  </section>
-</main>
+          <div class="view-modes" id="view-modes">
+            <button data-mode="masonry" class="active" title="Masonry"><i class="bi bi-columns-gap"></i></button>
+            <button data-mode="grid" title="Grid"><i class="bi bi-grid-3x3-gap"></i></button>
+            <button data-mode="list" title="List"><i class="bi bi-list-ul"></i></button>
+          </div>
 
-<footer class="footer">
-  <div class="footer-inner">
-    <div class="footer-brand">
-      <i class="bi bi-pinterest"></i>
-      <span>Pinterest Scraper</span>
-    </div>
-    <div class="footer-links">
-      <a href="https://github.com/raihan-rifat007/T" target="_blank" rel="noopener">
-        <i class="bi bi-github"></i> GitHub
-      </a>
-      <a href="/docs" target="_blank" rel="noopener">
-        <i class="bi bi-code-slash"></i> API Docs
-      </a>
-      <a href="/api/health" target="_blank" rel="noopener">
-        <i class="bi bi-activity"></i> Status
-      </a>
-    </div>
-    <div class="footer-copy">
-      Made with <i class="bi bi-heart-fill"></i> using FastAPI
+          <div class="density-toggle" id="density-toggle" role="group" aria-label="Density">
+            <button type="button" data-density="comfortable" title="Comfortable"><i class="bi bi-grid-3x3"></i></button>
+            <button type="button" data-density="default" class="active" title="Default"><i class="bi bi-grid"></i></button>
+            <button type="button" data-density="compact" title="Compact"><i class="bi bi-grid-3x3-gap"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <section id="progress-card" class="progress-card hidden">
+        <div class="progress-head">
+          <div class="progress-head-left">
+            <div class="spinner"></div>
+            <span id="progress-title">Collecting pins</span>
+          </div>
+          <div class="progress-head-right">
+            <span id="progress-eta" class="progress-eta"></span>
+            <span id="progress-pct" class="progress-pct">0%</span>
+            <button id="cancel-btn" class="btn ghost small">
+              <i class="bi bi-x-circle"></i> Cancel
+            </button>
+          </div>
+        </div>
+        <div class="phase-chips" id="phase-chips">
+          <span class="phase-chip" data-phase="collect">Collect</span>
+          <span class="phase-chip" data-phase="details">Details</span>
+          <span class="phase-chip" data-phase="download">Download</span>
+        </div>
+        <div class="bar"><div id="progress-bar" class="bar-fill"></div></div>
+        <div class="progress-meta-row">
+          <div id="progress-meta" class="progress-meta"></div>
+          <div id="progress-rate" class="progress-rate"></div>
+        </div>
+      </section>
+
+      <section id="stats-card" class="stats-card hidden"></section>
+
+      <section id="chart-card" class="chart-card hidden">
+        <h3><i class="bi bi-graph-up-arrow"></i> Engagement insights</h3>
+        <canvas id="chart-canvas" height="100"></canvas>
+      </section>
+
+      <section id="export-bar" class="export-bar hidden">
+        <a id="exp-zip" class="btn primary" href="#" download>
+          <i class="bi bi-file-zip"></i> Download ZIP
+        </a>
+        <a id="exp-xlsx" class="btn ghost" href="#" download>
+          <i class="bi bi-file-spreadsheet"></i> Export XLSX
+        </a>
+        <div class="toolbar-spacer"></div>
+        <button id="bulk-toggle" class="btn ghost">
+          <i class="bi bi-check2-square"></i> Select
+        </button>
+      </section>
+
+      <div id="filter-status" class="filter-status hidden"></div>
+
+      <section id="grid" class="masonry"></section>
+      <div id="scroll-sentinel" class="scroll-sentinel"></div>
+
+      <section id="empty" class="empty">
+        <div class="empty-badge" id="empty-icon">
+          <i class="bi bi-stars"></i>
+        </div>
+        <h2 id="empty-title">Find your inspiration</h2>
+        <p id="empty-text">Search for anything and scrape high-quality images with full metadata.</p>
+      </section>
+
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <i class="bi bi-pinterest"></i>
+          <span>Pinterest Scraper</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/raihan-rifat007/T" target="_blank" rel="noopener">
+            <i class="bi bi-github"></i> GitHub
+          </a>
+          <a href="/docs" target="_blank" rel="noopener">
+            <i class="bi bi-code-slash"></i> API Docs
+          </a>
+          <a href="/api/health" target="_blank" rel="noopener">
+            <i class="bi bi-activity"></i> Status
+          </a>
+        </div>
+        <div class="footer-copy">
+          Made with <i class="bi bi-heart-fill"></i> using FastAPI
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+</div>
+
+<div id="pin-detail" class="pin-detail" aria-hidden="true">
+  <div class="pin-detail-head">
+    <span class="pin-detail-counter" id="detail-counter">— / —</span>
+    <div class="pin-detail-head-actions">
+      <button class="icon-btn" id="detail-open-modal" title="Open full view"><i class="bi bi-arrows-fullscreen"></i></button>
+      <button class="icon-btn" id="detail-close" title="Close"><i class="bi bi-x-lg"></i></button>
     </div>
   </div>
-</footer>
+  <div class="pin-detail-body" id="detail-body"></div>
+</div>
 
 <div id="pin-modal" class="pin-modal" role="dialog" aria-hidden="true">
   <button id="pm-prev" class="nav-btn" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
   <div class="pin-modal-box">
     <div class="pm-topbar">
       <div class="pm-top-left">
-        <button id="pm-copy-link" class="icon-btn" title="Copy link" aria-label="Copy link"><i class="bi bi-link-45deg"></i></button>
+        <button id="pm-copy-link" class="icon-btn" title="Copy link"><i class="bi bi-link-45deg"></i></button>
         <a id="pm-pin-link" class="btn ghost small" target="_blank" rel="noopener">
           <i class="bi bi-pinterest"></i><span>Pinterest</span>
           <i class="bi bi-box-arrow-up-right"></i>
@@ -205,7 +299,6 @@
         <button id="close-pin-modal" class="icon-btn" aria-label="Close"><i class="bi bi-x-lg"></i></button>
       </div>
     </div>
-
     <div class="pin-modal-grid">
       <div class="pin-modal-imgwrap">
         <img id="pm-img" src="" alt="" loading="eager">
@@ -222,10 +315,8 @@
             <i class="bi bi-person-badge"></i> Profile
           </a>
         </div>
-
         <h2 id="pm-title" class="pm-title"></h2>
         <p id="pm-desc" class="pm-desc hidden"></p>
-
         <div class="pm-badges-row">
           <div class="pm-badge">
             <i class="bi bi-bookmark-heart"></i>
@@ -242,18 +333,15 @@
             <span class="pm-badge-val" id="pm-val-size">—</span>
           </div>
         </div>
-
         <div id="pm-board-row" class="pm-board-row hidden">
           <i class="bi bi-folder2-open"></i>
           <span>Board:</span>
           <a id="pm-board-name" class="pm-board-link" target="_blank" rel="noopener"></a>
         </div>
-
         <div class="pm-colors-wrap hidden">
           <span class="pm-section-label"><i class="bi bi-palette-fill"></i> Palette</span>
           <div id="pm-colors" class="pm-colors"></div>
         </div>
-
         <div class="pm-actions">
           <button id="pm-visual" class="btn ghost"><i class="bi bi-stars"></i> More like this</button>
         </div>
@@ -265,6 +353,8 @@
 
 <div id="selection-bar" class="selection-bar hidden">
   <span id="sel-count" class="sel-count">0 selected</span>
+  <button id="sel-download" class="btn ghost small"><i class="bi bi-cloud-arrow-down"></i> Download</button>
+  <button id="sel-collection" class="btn ghost small"><i class="bi bi-bookmark-plus"></i> Save</button>
   <button id="sel-delete" class="btn primary small"><i class="bi bi-trash3"></i> Delete</button>
   <button id="sel-cancel" class="btn ghost small">Cancel</button>
 </div>
@@ -281,7 +371,7 @@
     <div class="cp-footer">
       <span><kbd class="kbd-inline">↑</kbd> <kbd class="kbd-inline">↓</kbd> navigate</span>
       <span><kbd class="kbd-inline">↵</kbd> select</span>
-      <span class="cp-hint"><i class="bi bi-lightning-charge-fill" style="color:var(--red);"></i> Scraper Commands</span>
+      <span class="cp-hint"><i class="bi bi-lightning-charge-fill" style="color:var(--red);"></i> Commands</span>
     </div>
   </div>
 </div>
@@ -318,14 +408,12 @@
         <input type="checkbox" id="opt-insights">
       </div>
     </div>
-
     <div class="drawer-section">
       <div class="drawer-section-title"><i class="bi bi-rulers"></i> Quality &amp; limits</div>
       <div class="field"><label>Max pins</label><input type="number" id="opt-limit" value="25" min="1" max="500"></div>
       <div class="field"><label>Min image width (px)</label><input type="number" id="opt-min-width" value="0" min="0"></div>
       <div class="field"><label>Min image height (px)</label><input type="number" id="opt-min-height" value="0" min="0"></div>
     </div>
-
     <div class="drawer-section">
       <div class="drawer-section-title"><i class="bi bi-speedometer2"></i> Performance</div>
       <div class="field"><label>Concurrent workers</label><input type="number" id="opt-workers" value="4" min="1" max="16"></div>
@@ -333,12 +421,97 @@
       <div class="field"><label>Random jitter (s)</label><input type="number" id="opt-jitter" value="0.5" min="0" step="0.1"></div>
       <div class="field"><label>Save every N pins</label><input type="number" id="opt-batch" value="10" min="1" max="100"></div>
     </div>
-
     <button id="reset-settings" class="btn ghost" style="width:100%; justify-content:center; margin-top:8px;">
       <i class="bi bi-arrow-counterclockwise"></i> Reset to defaults
     </button>
   </div>
 </aside>
+
+<div id="schedules-panel" class="side-panel" aria-hidden="true">
+  <div class="side-panel-head">
+    <h2><i class="bi bi-clock-history"></i> Schedules</h2>
+    <button class="icon-btn" data-close-panel aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="side-panel-body">
+    <div class="schedule-form">
+      <div class="field"><label>Query</label><input type="text" id="sch-query" placeholder="e.g. minimal wallpaper"></div>
+      <div class="field-row">
+        <div class="field">
+          <label>Mode</label>
+          <select id="sch-mode">
+            <option value="search">Search</option>
+            <option value="board">Board</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Every (hours)</label>
+          <input type="number" id="sch-interval" value="24" min="1" max="720">
+        </div>
+      </div>
+      <div class="field"><label>Max pins</label><input type="number" id="sch-limit" value="25" min="1" max="200"></div>
+      <button class="btn primary" id="sch-add" style="width:100%; justify-content:center;">
+        <i class="bi bi-plus-lg"></i> Add schedule
+      </button>
+    </div>
+    <div class="side-panel-section-title">Active schedules</div>
+    <div id="schedules-list"></div>
+  </div>
+</div>
+
+<div id="collections-panel" class="side-panel" aria-hidden="true">
+  <div class="side-panel-head">
+    <h2><i class="bi bi-bookmark-heart"></i> Collections</h2>
+    <button class="icon-btn" data-close-panel aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="side-panel-body">
+    <div class="schedule-form">
+      <div class="field"><label>New collection</label><input type="text" id="col-name" placeholder="e.g. Wallpapers"></div>
+      <button class="btn primary" id="col-add" style="width:100%; justify-content:center;">
+        <i class="bi bi-plus-lg"></i> Create collection
+      </button>
+    </div>
+    <div class="side-panel-section-title">Your collections</div>
+    <div id="collections-list"></div>
+  </div>
+</div>
+
+<div id="history-panel" class="side-panel" aria-hidden="true">
+  <div class="side-panel-head">
+    <h2><i class="bi bi-arrow-counterclockwise"></i> History</h2>
+    <button class="icon-btn" data-close-panel aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="side-panel-body">
+    <button class="btn ghost" id="history-clear" style="width:100%; justify-content:center; margin-bottom:14px;">
+      <i class="bi bi-trash3"></i> Clear history
+    </button>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<div id="context-menu" class="context-menu hidden" role="menu"></div>
+
+<div id="shortcuts-overlay" class="shortcuts-overlay" aria-hidden="true">
+  <div class="shortcuts-card">
+    <div class="shortcuts-head">
+      <h2><i class="bi bi-keyboard"></i> Keyboard shortcuts</h2>
+      <button class="icon-btn" id="shortcuts-close" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="shortcuts-grid">
+      <div class="shortcut-item"><kbd>⌘</kbd><kbd>K</kbd><span>Command palette</span></div>
+      <div class="shortcut-item"><kbd>/</kbd><span>Focus search</span></div>
+      <div class="shortcut-item"><kbd>?</kbd><span>Show shortcuts</span></div>
+      <div class="shortcut-item"><kbd>F</kbd><span>Focus mode</span></div>
+      <div class="shortcut-item"><kbd>S</kbd><span>Toggle sidebar</span></div>
+      <div class="shortcut-item"><kbd>G</kbd><span>Open Gallery</span></div>
+      <div class="shortcut-item"><kbd>B</kbd><span>Bookmark / select</span></div>
+      <div class="shortcut-item"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>Switch view mode</span></div>
+      <div class="shortcut-item"><kbd>0</kbd><span>Reset filters</span></div>
+      <div class="shortcut-item"><kbd>D</kbd><span>Toggle dark</span></div>
+      <div class="shortcut-item"><kbd>Esc</kbd><span>Close overlays</span></div>
+      <div class="shortcut-item"><kbd>←</kbd><kbd>→</kbd><span>Navigate pins</span></div>
+    </div>
+  </div>
+</div>
 
 <div id="toast-container" class="toast-container"></div>
 
