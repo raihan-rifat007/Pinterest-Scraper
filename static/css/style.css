@@ -308,7 +308,6 @@ kbd {
 .sidebar-quick > span { flex: 1; }
 .sidebar-quick > kbd { flex-shrink: 0; }
 
-/* Sidebar collapsed */
 body[data-sidebar="collapsed"] .app-sidebar { width: var(--sidebar-w-collapsed); }
 body[data-sidebar="collapsed"] .brand-text { display: none; }
 body[data-sidebar="collapsed"] .sidebar-collapse { display: none; }
@@ -325,7 +324,6 @@ body[data-sidebar="collapsed"] .sidebar-quick > span,
 body[data-sidebar="collapsed"] .sidebar-quick > kbd { display: none; }
 body[data-sidebar="collapsed"] .sidebar-quick { justify-content: center; padding: 10px; }
 
-/* Content offset for sidebar */
 .app-main { margin-left: var(--sidebar-w); }
 body[data-sidebar="collapsed"] .app-main { margin-left: var(--sidebar-w-collapsed); }
 
@@ -496,7 +494,7 @@ body[data-sidebar="collapsed"] .app-main { margin-left: var(--sidebar-w-collapse
 }
 .suggestion-pill i { color: var(--red); font-size: .95rem; }
 
-/* ============ VIEW TOOLBAR (filters + sort + view modes) ============ */
+/* ============ VIEW TOOLBAR ============ */
 .view-toolbar {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 20px;
@@ -620,7 +618,6 @@ body[data-sidebar="collapsed"] .app-main { margin-left: var(--sidebar-w-collapse
 .density-toggle button:hover { color: var(--text); background: var(--surface); }
 .density-toggle button.active { background: var(--text); color: var(--bg-elevated); }
 
-/* Filter status row */
 .filter-status {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px;
@@ -879,8 +876,9 @@ body[data-view-mode="list"] .pin-meta a:hover { color: var(--red); }
 body[data-view-mode="list"] .pin-meta .title { font-size: .95rem; color: var(--text); -webkit-line-clamp: 1; }
 body[data-view-mode="list"] .pin-save { position: absolute; top: 14px; right: 14px; opacity: 1; transform: none; }
 body[data-view-mode="list"] .video-badge { display: none; }
+body[data-view-mode="list"] .pin-badges { display: none; }
 
-/* ============ PIN CARDS ============ */
+/* ============ PIN CARDS (FIXED) ============ */
 .pin-card {
   break-inside: avoid;
   margin-bottom: 18px;
@@ -892,8 +890,6 @@ body[data-view-mode="list"] .video-badge { display: none; }
   animation: fadeUp .5s var(--ease) both;
   transition: transform .3s var(--ease), box-shadow .3s var(--ease);
   box-shadow: var(--shadow-xs);
-  content-visibility: auto;
-  contain-intrinsic-size: 300px;
 }
 body[data-density="compact"] .pin-card { margin-bottom: 14px; border-radius: var(--radius); }
 body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
@@ -903,13 +899,18 @@ body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
   z-index: 2;
 }
 .pin-card.holding { transform: scale(.94) !important; box-shadow: 0 4px 20px rgba(0,0,0,.3) !important; }
+
+/* FIXED: image now has min-height + visible fallback */
 .pin-img {
-  width: 100%; display: block;
+  width: 100%;
+  display: block;
   opacity: 0;
+  min-height: 120px;
   transition: opacity .55s var(--ease);
   background: var(--surface);
 }
 .pin-img.img-loaded { opacity: 1; }
+.pin-img.img-failed { opacity: 1; }
 
 /* Badges on cards */
 .pin-badges {
@@ -935,7 +936,6 @@ body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
 .pin-badge.video { background: linear-gradient(135deg, #8B5CF6, #6366F1); }
 .pin-badge.res { background: rgba(0, 0, 0, 0.7); }
 
-/* Video play badge centered */
 .video-badge {
   position: absolute;
   top: 50%; left: 50%;
@@ -997,6 +997,7 @@ body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
   transform: translateY(-4px);
   opacity: 0;
   pointer-events: auto;
+  align-self: flex-end;
 }
 .pin-card:hover .pin-save { transform: translateY(0); opacity: 1; }
 .pin-save:hover { background: var(--red-hover); transform: scale(1.05); }
@@ -1025,7 +1026,16 @@ body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
   pointer-events: auto;
 }
 .pin-meta a:hover { color: #fff; }
-.pin-no-img { padding: 60px 24px; text-align: center; color: var(--text-dim); background: var(--surface); font-size: 1.8rem; }
+.pin-no-img {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-dim);
+  background: var(--surface);
+  font-size: 1.8rem;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+}
 
 /* ============ EMPTY ============ */
 .empty { text-align: center; padding: 80px 24px 40px; color: var(--text-muted); animation: fadeUp .6s var(--ease) both; }
@@ -1087,7 +1097,6 @@ body[data-density="comfortable"] .pin-card { margin-bottom: 22px; }
 }
 .overlay.open { opacity: 1; visibility: visible; pointer-events: auto; }
 
-/* ============ COMMAND PALETTE ============ */
 .command-palette {
   position: fixed; inset: 0; z-index: 400;
   display: flex;
@@ -1277,7 +1286,7 @@ kbd.kbd-inline {
 .field input:focus, .field select:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-/* ============ SIDE PANELS (Schedules, Collections, History) ============ */
+/* ============ SIDE PANELS ============ */
 .side-panel {
   position: fixed; top: 0; right: 0;
   height: 100vh; height: 100dvh;
