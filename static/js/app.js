@@ -22,6 +22,7 @@ let currentJob = null;
 let lastPins = [];
 let currentView = 'search';
 let allPins = [];
+let filteredPins = [];
 let renderedCount = 0;
 let loadingMore = false;
 const PAGE_SIZE = 25;
@@ -32,22 +33,42 @@ let pressTimer = null;
 let suppressClickUntil = 0;
 let pmIndex = -1;
 
+let activeFilter = 'all';
+let activeSort = 'newest';
+let viewMode = 'masonry';
+let detailPinId = null;
+
 const phaseOrder = ['collect', 'details', 'download'];
 const phaseState = {};
 let currentPhase = null;
+let progressStartTime = 0;
+let lastProgressUpdate = 0;
+let lastProgressCount = 0;
+
+let undoBuffer = null;
+
+const STORAGE_KEYS = {
+  settings: 'ps_settings',
+  density: 'ps_density',
+  viewMode: 'ps_view_mode',
+  sort: 'ps_sort',
+  theme: 'theme',
+  recent: 'recentSearches',
+  history: 'ps_history',
+  collections: 'ps_collections',
+  sidebar: 'ps_sidebar',
+};
 
 function loadSettings() {
   try {
-    const raw = localStorage.getItem('ps_settings');
+    const raw = localStorage.getItem(STORAGE_KEYS.settings);
     if (!raw) return { ...DEFAULTS };
     return { ...DEFAULTS, ...JSON.parse(raw) };
   } catch { return { ...DEFAULTS }; }
 }
-
 function saveSettings() {
-  try { localStorage.setItem('ps_settings', JSON.stringify(settings)); } catch {}
+  try { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings)); } catch {}
 }
-
 function syncDrawerFromSettings() {
   $('opt-download').checked = settings.download;
   $('opt-details').checked = settings.details;
@@ -60,7 +81,6 @@ function syncDrawerFromSettings() {
   $('opt-jitter').value = settings.jitter;
   $('opt-batch').value = settings.batch_size;
 }
-
 function readDrawerToSettings() {
   settings.download = $('opt-download').checked;
   settings.details = $('opt-details').checked;
@@ -74,7 +94,6 @@ function readDrawerToSettings() {
   settings.batch_size = +$('opt-batch').value || DEFAULTS.batch_size;
   saveSettings();
 }
-
 function openDrawer(open) {
   $('settings-drawer').classList.toggle('open', open);
   $('settings-drawer').setAttribute('aria-hidden', String(!open));
@@ -86,13 +105,19 @@ function escapeHtml(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
-
 function fmtNum(n) {
   if (n == null) return '0';
   return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 }
+function fmtDuration(seconds) {
+  if (!isFinite(seconds) || seconds < 0) return '';
+  if (seconds < 60) return Math.round(seconds) + 's';
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return m + 'm ' + s + 's';
+}
 
-window.showToast = function (msg, type = 'info', duration = 3500) {
+window.showToast = function (msg, type = 'info', duration = 3500, action = null) {
   const icons = {
     success: 'bi-check-circle-fill',
     error: 'bi-exclamation-octagon-fill',
@@ -102,11 +127,26 @@ window.showToast = function (msg, type = 'info', duration = 3500) {
   el.className = `toast ${type}`;
   el.innerHTML = `<i class="bi ${icons[type] || icons.info}"></i><div class="toast-msg"></div>`;
   el.querySelector('.toast-msg').textContent = msg;
+  if (action && action.label) {
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.onclick = () => {
+      try { action.onClick && action.onClick(); } finally {
+        el.classList.add('out');
+        setTimeout(() => el.remove(), 320);
+      }
+    };
+    el.appendChild(btn);
+  }
   $('toast-container').appendChild(el);
-  setTimeout(() => {
-    el.classList.add('out');
-    setTimeout(() => el.remove(), 320);
-  }, duration);
+  if (duration > 0) {
+    setTimeout(() => {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 320);
+    }, duration);
+  }
+  return el;
 };
 
 window.showError = function (msg) {
@@ -134,6 +174,80 @@ async function checkHealth() {
   }
 }
 
+// ====== History ======
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || '[]'); }
+  catch { return []; }
+}
+function addHistory(entry) {
+  const list = getHistory();
+  list.unshift({ ...entry, ts: Date.now() });
+  try { localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(list.slice(0, 100))); } catch {}
+  renderSidebarRecent();
+  renderHistory();
+}
+function clearHistory() {
+  try { localStorage.removeItem(STORAGE_KEYS.history); } catch {}
+  renderSidebarRecent();
+  renderHistory();
+  window.showToast('History cleared', 'success');
+}
+
+// ====== Recent searches (legacy + sidebar) ======
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.recent) || '[]'); }
+  catch { return []; }
+}
+function addRecent(q) {
+  if (!q) return;
+  const list = getRecent().filter(x => x !== q);
+  list.unshift(q);
+  try { localStorage.setItem(STORAGE_KEYS.recent, JSON.stringify(list.slice(0, 8))); } catch {}
+  renderRecent();
+  renderSidebarRecent();
+}
+function renderRecent() {
+  const row = $('recent-row');
+  if (!row) return;
+  const list = getRecent();
+  if (!list.length) { row.classList.add('hidden'); row.innerHTML = ''; return; }
+  row.classList.remove('hidden');
+  row.innerHTML = list.slice(0, 6).map(q =>
+    `<button class="suggestion-pill" data-q="${escapeHtml(q)}">
+      <i class="bi bi-clock-history"></i> ${escapeHtml(q)}
+    </button>`
+  ).join('');
+  row.querySelectorAll('.suggestion-pill').forEach(b => {
+    b.onclick = () => {
+      $('search-input').value = b.dataset.q;
+      startScrape();
+    };
+  });
+}
+function renderSidebarRecent() {
+  const list = $('sidebar-recent-list');
+  if (!list) return;
+  const recents = getRecent();
+  if (!recents.length) {
+    list.innerHTML = '<div class="sidebar-empty">No recent searches</div>';
+    return;
+  }
+  list.innerHTML = recents.slice(0, 8).map(q => `
+    <button class="recent-item" data-q="${escapeHtml(q)}">
+      <i class="bi bi-clock-history"></i>
+      <span>${escapeHtml(q)}</span>
+    </button>
+  `).join('');
+  list.querySelectorAll('.recent-item').forEach(b => {
+    b.onclick = () => {
+      $('search-input').value = b.dataset.q;
+      startScrape();
+      if (window.innerWidth <= 860) closeMobileSidebar();
+    };
+  });
+}
+
+// ====== Scrape ======
 async function startScrape() {
   const query = $('search-input').value.trim();
   if (!query) {
@@ -145,7 +259,7 @@ async function startScrape() {
 
   if (currentView !== 'search') {
     currentView = 'search';
-    setActiveTab('search');
+    setActiveNav('search');
   }
 
   const hero = $('hero');
@@ -155,7 +269,9 @@ async function startScrape() {
   $('stats-card').classList.add('hidden');
   showSkeletons();
   addRecent(query);
+  addHistory({ type: 'search', query });
   initProgress('Collecting pins');
+  pushURLState({ q: query });
 
   const body = { mode: 'search', query, ...settings };
   delete body.show_insights;
@@ -200,11 +316,7 @@ function handleEvent(ev, es) {
     const el = $('progress-title');
     if (el) el.textContent = `All queries done — ${ev.total} pins`;
   } else if (ev.event === 'phase') {
-    const labels = {
-      collect: 'Collecting pins',
-      details: 'Fetching details',
-      download: 'Downloading images',
-    };
+    const labels = { collect: 'Collecting pins', details: 'Fetching details', download: 'Downloading images' };
     $('progress-title').textContent = labels[ev.phase] || ev.phase;
     $('progress-bar').classList.toggle('indeterminate', ev.phase === 'collect' && !ev.total);
     const prevIdx = phaseOrder.indexOf(ev.phase);
@@ -212,22 +324,23 @@ function handleEvent(ev, es) {
       if (phaseState[phaseOrder[i]]) phaseState[phaseOrder[i]].done = true;
     }
     currentPhase = ev.phase;
-    if (!phaseState[ev.phase]) {
-      phaseState[ev.phase] = { count: 0, total: ev.total || 0, done: false };
-    }
+    if (!phaseState[ev.phase]) phaseState[ev.phase] = { count: 0, total: ev.total || 0, done: false };
     if (ev.total) phaseState[ev.phase].total = ev.total;
+    progressStartTime = performance.now();
+    lastProgressCount = 0;
+    lastProgressUpdate = progressStartTime;
     updatePhaseUI();
   } else if (ev.event === 'progress') {
     if (ev.phase) currentPhase = ev.phase;
     if (currentPhase && phaseState[currentPhase]) {
       phaseState[currentPhase].count = ev.count;
       if (ev.total) phaseState[currentPhase].total = ev.total;
-      if (phaseState[currentPhase].total > 0 &&
-          phaseState[currentPhase].count >= phaseState[currentPhase].total) {
+      if (phaseState[currentPhase].total > 0 && phaseState[currentPhase].count >= phaseState[currentPhase].total) {
         phaseState[currentPhase].done = true;
       }
     }
     updatePhaseUI();
+    updateRate(ev.count);
   } else if (ev.event === 'nothing_new') {
     const meta = $('progress-meta');
     if (meta) meta.textContent = `${meta.textContent} Pins are already up to date.`.trim();
@@ -237,45 +350,66 @@ function handleEvent(ev, es) {
   }
 }
 
+function updateRate(count) {
+  const now = performance.now();
+  const rateEl = $('progress-rate');
+  if (!rateEl) return;
+  const dt = (now - lastProgressUpdate) / 1000;
+  if (dt >= 1) {
+    const dc = count - lastProgressCount;
+    const rate = dc / dt;
+    if (rate > 0) rateEl.textContent = `${rate.toFixed(1)}/s`;
+    lastProgressUpdate = now;
+    lastProgressCount = count;
+  }
+  // ETA
+  const etaEl = $('progress-eta');
+  if (etaEl && currentPhase && phaseState[currentPhase]) {
+    const st = phaseState[currentPhase];
+    if (st.total > 0 && st.count > 0 && st.count < st.total) {
+      const elapsed = (now - progressStartTime) / 1000;
+      const perItem = elapsed / st.count;
+      const remaining = (st.total - st.count) * perItem;
+      etaEl.textContent = '~' + fmtDuration(remaining);
+    } else {
+      etaEl.textContent = '';
+    }
+  }
+}
+
 async function finishJob(ev) {
   const cancelBtn = $('cancel-btn');
   if (cancelBtn) {
     cancelBtn.disabled = false;
     cancelBtn.innerHTML = '<i class="bi bi-x-circle"></i> Cancel';
   }
-
   if (ev.status === 'cancelled') {
     window.showError('Cancelled');
     $('progress-card').classList.add('hidden');
     currentJob = null;
     return;
   }
-
   if (ev.status === 'error') {
     window.showError(`Scraping failed: ${ev.error}`);
     $('progress-card').classList.add('hidden');
     currentJob = null;
     return;
   }
-
   try {
     const res = await fetch(`/api/jobs/${currentJob}/result`);
     const data = await res.json();
     lastPins = data.pins || [];
     window._lastPins = lastPins;
     renderStats(ev);
-
     const hasImages = lastPins.some(p => p.local_file);
     if (!lastPins.length) {
-      window.showError(hasImages || ev.stats?.downloaded > 0
-        ? 'Pins are already up to date.'
-        : 'No results found for this query.');
+      window.showError(hasImages || ev.stats?.downloaded > 0 ? 'Pins are already up to date.' : 'No results found for this query.');
+    } else {
+      addHistory({ type: 'result', query: $('search-input').value.trim(), count: lastPins.length });
     }
-
-    resetFeed(lastPins);
+    applyFilterAndSort();
     renderChart();
     updateGalleryBadge();
-
     if (currentJob && lastPins.length > 0) {
       $('exp-xlsx').href = `/api/jobs/${currentJob}/export/xlsx`;
       $('exp-xlsx').classList.remove('hidden');
@@ -292,7 +426,6 @@ async function finishJob(ev) {
   } catch (e) {
     window.showError('Failed to load results');
   }
-
   $('progress-card').classList.add('hidden');
   currentJob = null;
 }
@@ -305,15 +438,18 @@ function initProgress(title) {
   $('progress-bar').style.width = '0%';
   $('progress-pct').textContent = '0%';
   $('progress-meta').textContent = '';
-
+  $('progress-eta').textContent = '';
+  $('progress-rate').textContent = '';
   const cancelBtn = $('cancel-btn');
   if (cancelBtn) {
     cancelBtn.disabled = false;
     cancelBtn.innerHTML = '<i class="bi bi-x-circle"></i> Cancel';
   }
-
   phaseOrder.forEach(p => { phaseState[p] = { count: 0, total: 0, done: false }; });
   currentPhase = 'collect';
+  progressStartTime = performance.now();
+  lastProgressUpdate = progressStartTime;
+  lastProgressCount = 0;
   updatePhaseUI();
 }
 
@@ -324,7 +460,6 @@ function updatePhaseUI() {
     ch.classList.toggle('active', p === currentPhase);
     ch.classList.toggle('done', !!(st && st.done));
   });
-
   const st = phaseState[currentPhase];
   let pct = 0;
   if (st && st.total > 0) {
@@ -333,7 +468,6 @@ function updatePhaseUI() {
   }
   $('progress-bar').style.width = pct + '%';
   $('progress-pct').textContent = pct + '%';
-
   const bits = [];
   phaseOrder.forEach(p => {
     const s = phaseState[p];
@@ -349,7 +483,6 @@ function renderStats(ev) {
   const onDisk = lastPins.filter(p => p.local_file).length;
   const failed = s.failed ?? 0;
   const currentQuery = $('search-input').value.trim();
-
   let html = `
     <div class="stats-header">
       <span class="stats-title"><i class="bi bi-graph-up-arrow"></i> Results Summary</span>
@@ -368,26 +501,125 @@ function renderStats(ev) {
         <span class="stat-icon"><i class="bi bi-hdd"></i></span>
         <div class="stat-data"><span class="stat-num">${onDisk}</span><span class="stat-lbl">Saved on disk</span></div>
       </div>`;
-
   if (failed > 0) {
-    html += `
-      <div class="stat-card stat-failed">
-        <span class="stat-icon"><i class="bi bi-exclamation-triangle"></i></span>
-        <div class="stat-data"><span class="stat-num">${failed}</span><span class="stat-lbl">Failed</span></div>
-      </div>`;
+    html += `<div class="stat-card stat-failed">
+      <span class="stat-icon"><i class="bi bi-exclamation-triangle"></i></span>
+      <div class="stat-data"><span class="stat-num">${failed}</span><span class="stat-lbl">Failed</span></div>
+    </div>`;
   }
-
   if (s.skipped_small) {
-    html += `
-      <div class="stat-card">
-        <span class="stat-icon"><i class="bi bi-aspect-ratio"></i></span>
-        <div class="stat-data"><span class="stat-num">${s.skipped_small}</span><span class="stat-lbl">Too small</span></div>
-      </div>`;
+    html += `<div class="stat-card">
+      <span class="stat-icon"><i class="bi bi-aspect-ratio"></i></span>
+      <div class="stat-data"><span class="stat-num">${s.skipped_small}</span><span class="stat-lbl">Too small</span></div>
+    </div>`;
   }
-
   html += '</div>';
   $('stats-card').innerHTML = html;
   $('stats-card').classList.remove('hidden');
+}
+
+// ====== Filter + Sort ======
+function pinMatchesFilter(pin, filter) {
+  if (filter === 'all') return true;
+  const isVideo = !!(pin.is_video && pin.video_url);
+  if (filter === 'video') return isVideo;
+  if (filter === 'downloaded') return !!pin.local_file;
+  if (filter === 'hd') {
+    const w = pin.width || 0;
+    const h = pin.height || 0;
+    return (w >= 1000 || h >= 1000);
+  }
+  if (filter === 'portrait') {
+    return pin.width && pin.height && pin.height > pin.width;
+  }
+  if (filter === 'landscape') {
+    return pin.width && pin.height && pin.width > pin.height;
+  }
+  return true;
+}
+
+function sortPins(pins, sort) {
+  const arr = [...pins];
+  if (sort === 'saves') return arr.sort((a, b) => (b.saves || 0) - (a.saves || 0));
+  if (sort === 'comments') return arr.sort((a, b) => (b.comments || 0) - (a.comments || 0));
+  if (sort === 'resolution') return arr.sort((a, b) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)));
+  if (sort === 'title') return arr.sort((a, b) => (a.title || a.pin_id).localeCompare(b.title || b.pin_id));
+  if (sort === 'oldest') return arr.reverse();
+  return arr;
+}
+
+function applyFilterAndSort() {
+  let pins = allPins;
+  if (activeFilter !== 'all') {
+    pins = pins.filter(p => pinMatchesFilter(p, activeFilter));
+  }
+  pins = sortPins(pins, activeSort);
+  filteredPins = pins;
+  updateFilterStatus();
+  resetFeed(pins);
+}
+
+function updateFilterStatus() {
+  const statusEl = $('filter-status');
+  if (!statusEl) return;
+  const parts = [];
+  if (activeFilter !== 'all') parts.push(`<i class="bi bi-funnel-fill"></i> Filter: <b>${escapeHtml(activeFilter)}</b>`);
+  if (activeSort !== 'newest') parts.push(`Sort: <b>${escapeHtml(activeSort)}</b>`);
+  if (parts.length) {
+    statusEl.classList.remove('hidden');
+    statusEl.innerHTML = parts.join(' · ') + ` · <span style="color:var(--text-dim);">${filteredPins.length} of ${allPins.length}</span>
+      <button class="clear-filters" id="clear-filters-btn">Clear all</button>`;
+    const btn = $('clear-filters-btn');
+    if (btn) btn.onclick = () => {
+      activeFilter = 'all';
+      activeSort = 'newest';
+      updateFilterChips();
+      updateSortLabel();
+      applyFilterAndSort();
+    };
+  } else {
+    statusEl.classList.add('hidden');
+  }
+}
+
+function updateFilterChips() {
+  $$('.filter-chip').forEach(ch => {
+    ch.classList.toggle('active', ch.dataset.filter === activeFilter);
+  });
+}
+
+function updateSortLabel() {
+  const labels = {
+    newest: 'Newest',
+    oldest: 'Oldest',
+    saves: 'Most saved',
+    comments: 'Most commented',
+    resolution: 'Highest res',
+    title: 'Title A–Z',
+  };
+  $('sort-label').textContent = labels[activeSort] || 'Newest';
+  $$('#sort-menu button').forEach(b => {
+    b.classList.toggle('active', b.dataset.sort === activeSort);
+  });
+}
+
+// ====== Grid rendering ======
+function pinResolutionBadge(pin) {
+  if (!pin.width || !pin.height) return '';
+  const min = Math.min(pin.width, pin.height);
+  let cls = 'res';
+  let icon = '';
+  if (min >= 1000) { cls = 'hd'; icon = 'HD'; }
+  const label = icon || `${pin.width}×${pin.height}`;
+  return `<div class="pin-badge ${cls}"><i class="bi bi-badge-hd"></i>${escapeHtml(label)}</div>`;
+}
+function pinDownloadedBadge(pin) {
+  if (!pin.local_file) return '';
+  return `<div class="pin-badge dl"><i class="bi bi-check-circle-fill"></i>Saved</div>`;
+}
+function pinVideoBadge(pin) {
+  if (!(pin.is_video && pin.video_url)) return '';
+  return `<div class="pin-badge video"><i class="bi bi-play-fill"></i>Video</div>`;
 }
 
 function renderGrid(pins, incremental) {
@@ -405,7 +637,9 @@ function renderGrid(pins, incremental) {
     const card = document.createElement('article');
     card.className = 'pin-card';
     card._pin = pin;
+    card.dataset.pinId = pin.pin_id;
     if (selectionMode) card.classList.add('selectable');
+    if (selectedFiles.has(pin.local_file)) card.classList.add('selected');
     card.style.animationDelay = `${Math.min(i * 0.03, 0.6)}s`;
 
     const imgBlock = src
@@ -415,16 +649,19 @@ function renderGrid(pins, incremental) {
             style="aspect-ratio:${pin.width && pin.height ? pin.width + '/' + pin.height : 'auto'}">`
       : `<div class="pin-no-img"><i class="bi bi-image"></i></div>`;
 
-    const videoBadge = isVideo
-      ? `<div class="video-badge"><i class="bi bi-play-fill"></i></div>`
-      : '';
+    const badges = [
+      pinDownloadedBadge(pin),
+      pinVideoBadge(pin),
+      pinResolutionBadge(pin),
+    ].filter(Boolean).join('');
+
+    const videoBadge = isVideo ? `<div class="video-badge"><i class="bi bi-play-fill"></i></div>` : '';
 
     const statsLine = (pin.saves || pin.comments)
       ? `<div class="stats">
           ${pin.saves ? `<span><i class="bi bi-bookmark-heart"></i> ${fmtNum(pin.saves)}</span>` : ''}
           ${pin.comments ? `<span><i class="bi bi-chat-dots"></i> ${fmtNum(pin.comments)}</span>` : ''}
-        </div>`
-      : '';
+        </div>` : '';
 
     const sizeLine = pin.width
       ? `<div class="stats"><span><i class="bi bi-aspect-ratio"></i> ${pin.width} × ${pin.height}</span></div>`
@@ -432,8 +669,13 @@ function renderGrid(pins, incremental) {
 
     card.innerHTML = `
       ${imgBlock}
+      ${badges ? `<div class="pin-badges">${badges}</div>` : ''}
       ${videoBadge}
       <div class="pin-overlay">
+        <div class="pin-card-overlay-actions">
+          <button class="pin-action-btn" data-card-action="quick-save" title="Save to collection"><i class="bi bi-bookmark-plus"></i></button>
+          <button class="pin-action-btn" data-card-action="quick-delete" title="Remove"><i class="bi bi-trash3"></i></button>
+        </div>
         <button class="pin-save" type="button"><i class="bi bi-download"></i> Save</button>
         <div class="pin-meta">
           ${pin.title ? `<div class="title">${escapeHtml(pin.title.slice(0, 80))}</div>` : ''}
@@ -454,8 +696,13 @@ function renderGrid(pins, incremental) {
 
     card.addEventListener('click', (e) => {
       if (selectionMode) return;
-      if (e.target.closest('a')) return;
-      openPinModal(pin, src);
+      if (e.target.closest('a, button')) return;
+      openPinDetail(pin);
+    });
+
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openContextMenu(e.clientX, e.clientY, pin);
     });
 
     const saveBtn = card.querySelector('.pin-save');
@@ -467,26 +714,69 @@ function renderGrid(pins, incremental) {
       });
     }
 
+    card.querySelectorAll('[data-card-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.cardAction;
+        if (action === 'quick-save') quickSaveToCollection(pin);
+        else if (action === 'quick-delete') quickRemovePin(pin);
+      });
+    });
+
     grid.appendChild(card);
   });
 }
 
-function setActiveTab(view) {
-  $$('.segmented .tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.view === view);
-  });
-  moveIndicator();
+function quickSaveToCollection(pin) {
+  const cols = getCollections();
+  if (!cols.length) {
+    window.showToast('No collections yet — create one first', 'info');
+    openCollectionsPanel();
+    return;
+  }
+  // Simple prompt-less: save to first collection
+  const target = cols[0];
+  if (!target.pins) target.pins = [];
+  if (!target.pins.includes(pin.pin_id)) {
+    target.pins.push(pin.pin_id);
+    saveCollections(cols);
+    window.showToast(`Saved to "${target.name}"`, 'success');
+    updateNavBadges();
+  } else {
+    window.showToast(`Already in "${target.name}"`, 'info');
+  }
 }
 
-function moveIndicator() {
-  const active = document.querySelector('.segmented .tab.active');
-  const indicator = $('tab-indicator');
-  if (!active || !indicator) return;
-  const parent = active.parentElement;
-  const pRect = parent.getBoundingClientRect();
-  const aRect = active.getBoundingClientRect();
-  indicator.style.width = aRect.width + 'px';
-  indicator.style.transform = `translateX(${aRect.left - pRect.left - 4}px)`;
+function quickRemovePin(pin) {
+  if (!pin.local_file) {
+    window.showToast('No local file to remove', 'info');
+    return;
+  }
+  const card = document.querySelector(`.pin-card[data-pin-id="${pin.pin_id}"]`);
+  if (card) card.classList.add('quick-remove');
+  fetch('/api/images/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names: [pin.local_file] }),
+  }).then(() => {
+    lastPins = lastPins.filter(p => p.pin_id !== pin.pin_id);
+    allPins = allPins.filter(p => p.pin_id !== pin.pin_id);
+    window._lastPins = lastPins;
+    setTimeout(() => {
+      card?.remove();
+      updateGalleryBadge();
+    }, 300);
+    window.showToast('Removed', 'success');
+  }).catch(() => {
+    card?.classList.remove('quick-remove');
+    window.showError('Remove failed');
+  });
+}
+
+function setActiveNav(view) {
+  $$('.nav-btn-main').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === view);
+  });
 }
 
 async function updateGalleryBadge() {
@@ -494,32 +784,33 @@ async function updateGalleryBadge() {
     const res = await fetch('/api/gallery');
     if (res.ok) {
       const data = await res.json();
+      const total = data.total ?? 0;
       const badge = $('gallery-badge');
-      if (badge) badge.textContent = data.total ?? 0;
+      if (badge) badge.textContent = total;
+      const navBadge = $('nav-gallery-count');
+      if (navBadge) navBadge.textContent = total;
     }
   } catch {}
 }
 
 async function showGallery() {
   currentView = 'gallery';
-  setActiveTab('gallery');
+  setActiveNav('gallery');
+  closeAllPanels();
   $('progress-card').classList.add('hidden');
   $('stats-card').classList.add('hidden');
   $('chart-card').classList.add('hidden');
-
   const hero = $('hero');
   if (hero) hero.classList.add('hidden');
-
   const recentRow = $('recent-row');
   if (recentRow) recentRow.classList.add('hidden');
   showSkeletons(12);
-
   try {
     const res = await fetch('/api/gallery');
     const data = await res.json();
     const pins = data.pins || [];
     $('gallery-badge').textContent = data.total ?? pins.length;
-
+    $('nav-gallery-count').textContent = data.total ?? pins.length;
     if (!pins.length) {
       $('grid').innerHTML = '';
       $('empty-icon').innerHTML = '<i class="bi bi-images"></i>';
@@ -529,12 +820,14 @@ async function showGallery() {
       $('export-bar').classList.add('hidden');
     } else {
       $('empty').classList.add('hidden');
-      resetFeed(pins);
+      allPins = pins;
+      lastPins = pins;
+      window._lastPins = pins;
+      applyFilterAndSort();
       $('exp-zip').href = '/api/gallery/export/zip';
       $('exp-zip').classList.remove('hidden');
       $('exp-xlsx').classList.add('hidden');
       $('export-bar').classList.remove('hidden');
-
       $('stats-card').innerHTML = `
         <div class="stats-header">
           <span class="stats-title"><i class="bi bi-images"></i> Gallery</span>
@@ -555,14 +848,15 @@ async function showGallery() {
 
 function showSearch() {
   currentView = 'search';
-  setActiveTab('search');
+  setActiveNav('search');
+  closeAllPanels();
   $('empty-icon').innerHTML = '<i class="bi bi-stars"></i>';
   $('empty-title').textContent = 'Find your inspiration';
   $('empty-text').textContent = 'Search for anything and scrape high-quality images with full metadata.';
-
   if (lastPins && lastPins.length > 0) {
     $('empty').classList.add('hidden');
-    resetFeed(lastPins);
+    allPins = lastPins;
+    applyFilterAndSort();
     const hasImages = lastPins.some(p => p.local_file);
     if (currentJob) {
       $('exp-xlsx').href = `/api/jobs/${currentJob}/export/xlsx`;
@@ -587,19 +881,19 @@ function showSearch() {
 }
 
 function resetFeed(pins) {
-  allPins = pins || [];
-  lastPins = allPins;
-  window._lastPins = allPins;
+  allPins = pins || allPins;
+  lastPins = pins || lastPins;
+  window._lastPins = lastPins;
   renderedCount = 0;
-  renderGrid(allPins.slice(0, PAGE_SIZE));
-  renderedCount = Math.min(PAGE_SIZE, allPins.length);
+  renderGrid(pins.slice(0, PAGE_SIZE));
+  renderedCount = Math.min(PAGE_SIZE, pins.length);
 }
 
 function loadMore() {
-  if (loadingMore || renderedCount >= allPins.length) return;
+  if (loadingMore || renderedCount >= filteredPins.length) return;
   loadingMore = true;
-  renderGrid(allPins, true);
-  renderedCount = allPins.length;
+  renderGrid(filteredPins, true);
+  renderedCount = filteredPins.length;
   loadingMore = false;
 }
 
@@ -615,19 +909,127 @@ function showSkeletons(n = 12) {
   }
 }
 
+// ====== Pin Detail Side Panel ======
+function openPinDetail(pin) {
+  const pins = filteredPins.length ? filteredPins : (window._lastPins || lastPins || []);
+  const idx = pins.findIndex(p => p.pin_id === pin.pin_id);
+  if (idx < 0) return;
+  // On narrow screens use modal
+  if (window.innerWidth < 1024) {
+    openPinModal(pin);
+    return;
+  }
+  detailPinId = pin.pin_id;
+  pmIndex = idx;
+  renderPinDetail(pins, idx);
+  const panel = $('pin-detail');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  // Highlight selected card
+  document.querySelectorAll('.pin-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.pinId === pin.pin_id);
+  });
+}
+
+function closePinDetail() {
+  const panel = $('pin-detail');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  detailPinId = null;
+  document.querySelectorAll('.pin-card').forEach(c => c.classList.remove('selected'));
+}
+
+function renderPinDetail(pins, idx) {
+  if (idx < 0 || idx >= pins.length) return;
+  const pin = pins[idx];
+  const isVideo = !!(pin.is_video && pin.video_url);
+  const local = pin.local_file ? `/api/images/${encodeURIComponent(pin.local_file)}` : '';
+  const src = local || pin.image_url || '';
+  const creatorName = pin.creator_name || pin.creator_username || 'Unknown creator';
+  const creatorUser = pin.creator_username ? `@${pin.creator_username}` : '';
+  const initial = creatorName ? creatorName.trim()[0].toUpperCase() : '?';
+
+  $('detail-counter').textContent = `${idx + 1} / ${pins.length}`;
+
+  let imageHTML;
+  if (isVideo) {
+    imageHTML = `<video src="${escapeHtml(pin.video_url)}" muted loop playsinline controls autoplay></video>`;
+  } else {
+    imageHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(pin.title || '')}"
+      onerror="this.onerror=null;this.src='${escapeHtml(pin.image_url || '')}'">`;
+  }
+
+  const badgesHTML = `
+    <div class="pd-stats">
+      ${pin.saves != null ? `<span class="pd-stat"><i class="bi bi-bookmark-heart"></i> <b>${fmtNum(pin.saves)}</b> saves</span>` : ''}
+      ${pin.comments != null ? `<span class="pd-stat"><i class="bi bi-chat-dots"></i> <b>${fmtNum(pin.comments)}</b> comments</span>` : ''}
+      ${pin.width ? `<span class="pd-stat"><i class="bi bi-aspect-ratio"></i> <b>${pin.width}×${pin.height}</b></span>` : ''}
+      ${pin.local_file ? `<span class="pd-stat"><i class="bi bi-hdd"></i> On disk</span>` : ''}
+    </div>`;
+
+  const colorsHTML = (pin.dominant_color || (pin.colors && pin.colors.length))
+    ? `<div class="pm-colors-wrap">
+        <span class="pm-section-label"><i class="bi bi-palette-fill"></i> Palette</span>
+        <div class="pm-colors">
+          ${[pin.dominant_color, ...(pin.colors || [])].filter(Boolean).filter((c, i, a) => a.indexOf(c) === i).map(c =>
+            `<div class="color-chip" style="background:${escapeHtml(c)}" title="${escapeHtml(c)}" data-color="${escapeHtml(c)}"></div>`
+          ).join('')}
+        </div>
+      </div>` : '';
+
+  $('detail-body').innerHTML = `
+    <div class="pd-image">${imageHTML}</div>
+    <div class="pd-info">
+      <div class="pd-creator">
+        <div class="pd-avatar">${escapeHtml(initial)}</div>
+        <div class="pd-creator-meta">
+          <div class="pd-creator-name">${escapeHtml(creatorName)}</div>
+          ${creatorUser ? `<div class="pd-creator-user">${escapeHtml(creatorUser)}</div>` : ''}
+        </div>
+      </div>
+      ${pin.title ? `<div class="pd-title">${escapeHtml(pin.title)}</div>` : ''}
+      ${pin.description ? `<div class="pd-desc">${escapeHtml(pin.description.slice(0, 400))}</div>` : ''}
+      ${badgesHTML}
+      ${colorsHTML}
+      <div class="pd-actions">
+        ${src ? `<a class="btn primary small" href="${escapeHtml(src)}" target="_blank" download><i class="bi bi-download"></i> Download</a>` : ''}
+        <button class="btn ghost small" id="pd-collection"><i class="bi bi-bookmark-plus"></i> Save</button>
+        <button class="btn ghost small" id="pd-visual"><i class="bi bi-stars"></i> Similar</button>
+        ${pin.pin_url ? `<a class="btn ghost small" href="${escapeHtml(pin.pin_url)}" target="_blank" rel="noopener"><i class="bi bi-pinterest"></i> Pinterest</a>` : ''}
+      </div>
+    </div>`;
+
+  // Wire colors
+  $('detail-body').querySelectorAll('.color-chip').forEach(c => {
+    c.onclick = () => {
+      navigator.clipboard?.writeText(c.dataset.color);
+      window.showToast(`Copied ${c.dataset.color}`, 'success', 1500);
+    };
+  });
+
+  const colBtn = $('pd-collection');
+  if (colBtn) colBtn.onclick = () => quickSaveToCollection(pin);
+  const visBtn = $('pd-visual');
+  if (visBtn) visBtn.onclick = () => runVisualSearch(pin.pin_id);
+
+  const openModalBtn = $('detail-open-modal');
+  openModalBtn.onclick = () => {
+    closePinDetail();
+    openPinModal(pin);
+  };
+}
+
+// ====== Pin Modal ======
 function showPinAt(index) {
   const pins = window._lastPins || lastPins || [];
   if (!pins.length) return;
   pmIndex = ((index % pins.length) + pins.length) % pins.length;
   const pin = pins[pmIndex];
-
   const local = pin.local_file ? `/api/images/${encodeURIComponent(pin.local_file)}` : '';
   const src = local || pin.image_url || '';
   const isVideo = !!(pin.is_video && pin.video_url);
-
   const pmImg = $('pm-img');
   const pmVideo = $('pm-video');
-
   if (isVideo && pmVideo) {
     if (pmImg) pmImg.classList.add('hidden');
     pmVideo.classList.remove('hidden');
@@ -635,24 +1037,16 @@ function showPinAt(index) {
     pmVideo.load();
     pmVideo.play().catch(() => {});
   } else {
-    if (pmVideo) {
-      pmVideo.pause();
-      pmVideo.src = '';
-      pmVideo.classList.add('hidden');
-    }
+    if (pmVideo) { pmVideo.pause(); pmVideo.src = ''; pmVideo.classList.add('hidden'); }
     if (pmImg) {
       pmImg.classList.remove('hidden', 'zoomed', 'pm-img-fade');
       void pmImg.offsetWidth;
       pmImg.src = src;
       pmImg.classList.add('pm-img-fade');
       pmImg.alt = pin.title || pin.pin_id || '';
-      pmImg.onerror = () => {
-        pmImg.onerror = null;
-        if (pin.image_url && pmImg.src !== pin.image_url) pmImg.src = pin.image_url;
-      };
+      pmImg.onerror = () => { pmImg.onerror = null; if (pin.image_url && pmImg.src !== pin.image_url) pmImg.src = pin.image_url; };
     }
   }
-
   const creatorName = pin.creator_name || pin.creator_username || '';
   const creatorUser = pin.creator_username ? `@${pin.creator_username}` : '';
   const avatarEl = $('pm-creator-avatar');
@@ -661,46 +1055,30 @@ function showPinAt(index) {
     else if (pin.creator_username) avatarEl.textContent = (pin.creator_username[0] || 'P').toUpperCase();
     else avatarEl.textContent = '?';
   }
-  const nameEl = $('pm-creator-name');
-  if (nameEl) nameEl.textContent = creatorName || 'Unknown creator';
-  const userEl = $('pm-creator-user');
-  if (userEl) userEl.textContent = creatorUser;
+  $('pm-creator-name').textContent = creatorName || 'Unknown creator';
+  $('pm-creator-user').textContent = creatorUser;
   const linkEl = $('pm-creator-link');
-  if (linkEl) {
-    if (pin.creator_username) {
-      linkEl.href = `https://www.pinterest.com/${pin.creator_username}/`;
-      linkEl.classList.remove('hidden');
-    } else {
-      linkEl.classList.add('hidden');
-    }
-  }
+  if (creatorUser) {
+    linkEl.href = `https://www.pinterest.com/${pin.creator_username}/`;
+    linkEl.classList.remove('hidden');
+  } else linkEl.classList.add('hidden');
 
-  const titleEl = $('pm-title');
-  if (titleEl) titleEl.textContent = pin.title || `Pin ${pin.pin_id}`;
+  $('pm-title').textContent = pin.title || `Pin ${pin.pin_id}`;
   const descEl = $('pm-desc');
-  if (descEl) {
-    descEl.textContent = pin.description || '';
-    descEl.classList.toggle('hidden', !pin.description);
-  }
+  descEl.textContent = pin.description || '';
+  descEl.classList.toggle('hidden', !pin.description);
 
-  const savesVal = $('pm-val-saves');
-  if (savesVal) savesVal.textContent = fmtNum(pin.saves ?? 0);
-  const commVal = $('pm-val-comments');
-  if (commVal) commVal.textContent = fmtNum(pin.comments ?? 0);
-  const sizeVal = $('pm-val-size');
-  if (sizeVal) sizeVal.textContent = (pin.width && pin.height) ? `${pin.width} × ${pin.height}` : '—';
+  $('pm-val-saves').textContent = fmtNum(pin.saves ?? 0);
+  $('pm-val-comments').textContent = fmtNum(pin.comments ?? 0);
+  $('pm-val-size').textContent = (pin.width && pin.height) ? `${pin.width} × ${pin.height}` : '—';
 
   const boardRow = $('pm-board-row');
   const boardLink = $('pm-board-name');
-  if (boardRow && boardLink) {
-    if (pin.board_name) {
-      boardRow.classList.remove('hidden');
-      boardLink.textContent = pin.board_name;
-      boardLink.href = pin.board_url || '#';
-    } else {
-      boardRow.classList.add('hidden');
-    }
-  }
+  if (pin.board_name) {
+    boardRow.classList.remove('hidden');
+    boardLink.textContent = pin.board_name;
+    boardLink.href = pin.board_url || '#';
+  } else boardRow.classList.add('hidden');
 
   const colorsWrap = $('pm-colors');
   const colorsParent = colorsWrap ? colorsWrap.closest('.pm-colors-wrap') : null;
@@ -708,9 +1086,7 @@ function showPinAt(index) {
     colorsWrap.innerHTML = '';
     const palette = [];
     if (pin.dominant_color) palette.push(pin.dominant_color);
-    if (Array.isArray(pin.colors)) {
-      pin.colors.forEach(c => { if (!palette.includes(c)) palette.push(c); });
-    }
+    if (Array.isArray(pin.colors)) pin.colors.forEach(c => { if (!palette.includes(c)) palette.push(c); });
     if (palette.length > 0) {
       palette.forEach(color => {
         const c = document.createElement('div');
@@ -725,42 +1101,29 @@ function showPinAt(index) {
         };
         colorsWrap.appendChild(c);
       });
-      if (colorsParent) colorsParent.classList.remove('hidden');
-    } else {
-      if (colorsParent) colorsParent.classList.add('hidden');
-    }
+      colorsParent.classList.remove('hidden');
+    } else colorsParent.classList.add('hidden');
   }
-
   const dlBtn = $('pm-download');
-  if (dlBtn) {
-    dlBtn.href = isVideo ? (pin.video_url || src) : src;
-    dlBtn.download = isVideo ? `pin_${pin.pin_id}.mp4` : `pin_${pin.pin_id}.jpg`;
-  }
-
-  const pinLink = $('pm-pin-link');
-  if (pinLink) {
-    pinLink.href = pin.pin_url || `https://www.pinterest.com/pin/${pin.pin_id}/`;
-  }
-
+  dlBtn.href = isVideo ? (pin.video_url || src) : src;
+  dlBtn.download = isVideo ? `pin_${pin.pin_id}.mp4` : `pin_${pin.pin_id}.jpg`;
+  $('pm-pin-link').href = pin.pin_url || `https://www.pinterest.com/pin/${pin.pin_id}/`;
   const copyBtn = $('pm-copy-link');
-  if (copyBtn) {
-    copyBtn.onclick = async () => {
-      const urlToCopy = pin.pin_url || pin.image_url || window.location.href;
-      try {
-        await navigator.clipboard.writeText(urlToCopy);
-        const origHtml = copyBtn.innerHTML;
-        copyBtn.innerHTML = '<i class="bi bi-check-lg" style="color:var(--green)"></i>';
-        window.showToast('Link copied to clipboard', 'success', 2000);
-        setTimeout(() => { copyBtn.innerHTML = origHtml; }, 1400);
-      } catch {}
-    };
-  }
-
+  copyBtn.onclick = async () => {
+    const urlToCopy = pin.pin_url || pin.image_url || window.location.href;
+    try {
+      await navigator.clipboard.writeText(urlToCopy);
+      const origHtml = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<i class="bi bi-check-lg" style="color:var(--green)"></i>';
+      window.showToast('Link copied', 'success', 2000);
+      setTimeout(() => { copyBtn.innerHTML = origHtml; }, 1400);
+    } catch {}
+  };
   const visualBtn = $('pm-visual');
   if (visualBtn) visualBtn.onclick = () => runVisualSearch(pin.pin_id);
 }
 
-function openPinModal(pin, src) {
+function openPinModal(pin) {
   const pins = window._lastPins || lastPins || [];
   pmIndex = Math.max(0, pins.findIndex(p => p.pin_id === pin.pin_id));
   showPinAt(pmIndex);
@@ -770,48 +1133,35 @@ function openPinModal(pin, src) {
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
 }
-
 function closePinModal() {
   const pmVideo = $('pm-video');
-  if (pmVideo) {
-    pmVideo.pause();
-    pmVideo.src = '';
-    pmVideo.classList.add('hidden');
-  }
+  if (pmVideo) { pmVideo.pause(); pmVideo.src = ''; pmVideo.classList.add('hidden'); }
   const pmImg = $('pm-img');
   if (pmImg) pmImg.classList.remove('hidden', 'zoomed');
   document.body.style.overflow = '';
   const m = $('pin-modal');
   m.classList.add('closing');
   m.classList.remove('open');
-  setTimeout(() => {
-    m.classList.remove('closing');
-    m.setAttribute('aria-hidden', 'true');
-  }, 280);
+  setTimeout(() => { m.classList.remove('closing'); m.setAttribute('aria-hidden', 'true'); }, 280);
 }
-
 function pmNav(dir) { showPinAt(pmIndex + dir); }
 
 async function runVisualSearch(pinId) {
   closePinModal();
+  closePinDetail();
   showSkeletons(10);
   $('progress-card').classList.remove('hidden');
   $('progress-title').textContent = 'Finding similar pins…';
   $('progress-bar').classList.add('indeterminate');
-
   try {
     const res = await fetch(`/api/visual-search?pin_id=${pinId}&limit=30`);
     const data = await res.json();
     $('progress-card').classList.add('hidden');
-
-    if (!res.ok) {
-      window.showError(data.detail || 'Visual search failed');
-      return;
-    }
-
+    if (!res.ok) { window.showError(data.detail || 'Visual search failed'); return; }
     lastPins = data.pins || [];
     window._lastPins = lastPins;
-
+    allPins = lastPins;
+    addHistory({ type: 'visual', pin_id: pinId, count: lastPins.length });
     $('stats-card').innerHTML = `
       <div class="stats-header">
         <span class="stats-title"><i class="bi bi-stars"></i> Visually similar pins</span>
@@ -820,7 +1170,7 @@ async function runVisualSearch(pinId) {
     $('stats-card').classList.remove('hidden');
     $('export-bar').classList.add('hidden');
     $('chart-card').classList.add('hidden');
-    resetFeed(lastPins);
+    applyFilterAndSort();
   } catch {
     $('progress-card').classList.add('hidden');
     window.showError('Visual search failed');
@@ -828,15 +1178,9 @@ async function runVisualSearch(pinId) {
 }
 
 function renderChart() {
-  if (!settings.show_insights) {
-    $('chart-card').classList.add('hidden');
-    return;
-  }
+  if (!settings.show_insights) { $('chart-card').classList.add('hidden'); return; }
   const pins = (window._lastPins || lastPins || []).filter(p => p.saves != null);
-  if (pins.length < 2) {
-    $('chart-card').classList.add('hidden');
-    return;
-  }
+  if (pins.length < 2) { $('chart-card').classList.add('hidden'); return; }
   const top = [...pins].sort((a, b) => b.saves - a.saves).slice(0, 12);
   $('chart-card').classList.remove('hidden');
   const dark = document.body.dataset.theme === 'dark';
@@ -846,12 +1190,7 @@ function renderChart() {
     type: 'bar',
     data: {
       labels: top.map(p => (p.title || p.pin_id).slice(0, 22)),
-      datasets: [{
-        label: 'Saves',
-        data: top.map(p => p.saves),
-        backgroundColor: '#E60023',
-        borderRadius: 7,
-      }],
+      datasets: [{ label: 'Saves', data: top.map(p => p.saves), backgroundColor: '#E60023', borderRadius: 7 }],
     },
     options: {
       indexAxis: 'y',
@@ -865,23 +1204,19 @@ function renderChart() {
   });
 }
 
+// ====== Theme ======
 function applyTheme(t) {
   document.body.dataset.theme = t;
-  try { localStorage.setItem('theme', t); } catch {}
+  try { localStorage.setItem(STORAGE_KEYS.theme, t); } catch {}
   const icon = document.getElementById('theme-icon');
   if (icon) icon.className = t === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', t === 'dark' ? '#08080A' : '#E60023');
-  if (window._chart) {
-    window._chart.destroy();
-    window._chart = null;
-    renderChart();
-  }
+  if (window._chart) { window._chart.destroy(); window._chart = null; renderChart(); }
 }
-
 function initTheme() {
   let saved = null;
-  try { saved = localStorage.getItem('theme'); } catch {}
+  try { saved = localStorage.getItem(STORAGE_KEYS.theme); } catch {}
   const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   applyTheme(saved || sys);
   const btn = document.getElementById('theme-btn');
@@ -890,59 +1225,200 @@ function initTheme() {
   };
 }
 
-function getRecent() {
-  try { return JSON.parse(localStorage.getItem('recentSearches') || '[]'); }
+// ====== Collections ======
+function getCollections() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.collections) || '[]'); }
   catch { return []; }
 }
-
-function addRecent(q) {
-  if (!q) return;
-  const list = getRecent().filter(x => x !== q);
-  list.unshift(q);
-  try { localStorage.setItem('recentSearches', JSON.stringify(list.slice(0, 8))); } catch {}
-  renderRecent();
+function saveCollections(list) {
+  try { localStorage.setItem(STORAGE_KEYS.collections, JSON.stringify(list)); } catch {}
+  renderCollections();
+  updateNavBadges();
 }
-
-function renderRecent() {
-  const row = document.getElementById('recent-row');
-  if (!row) return;
-  const list = getRecent();
-  if (!list.length) { row.classList.add('hidden'); row.innerHTML = ''; return; }
-  row.classList.remove('hidden');
-  row.innerHTML = list.slice(0, 6).map(q =>
-    `<button class="suggestion-pill" data-q="${escapeHtml(q)}">
-      <i class="bi bi-clock-history"></i> ${escapeHtml(q)}
-    </button>`
-  ).join('');
-  row.querySelectorAll('.suggestion-pill').forEach(b => {
-    b.onclick = () => {
-      document.getElementById('search-input').value = b.dataset.q;
-      startScrape();
+function renderCollections() {
+  const list = $('collections-list');
+  if (!list) return;
+  const cols = getCollections();
+  if (!cols.length) {
+    list.innerHTML = `<div class="panel-empty"><i class="bi bi-bookmark"></i><span>No collections yet</span></div>`;
+    return;
+  }
+  list.innerHTML = cols.map(c => `
+    <div class="collection-item" data-col-id="${c.id}">
+      <div class="collection-item-info">
+        <div class="collection-item-title">${escapeHtml(c.name)}</div>
+        <div class="collection-item-meta">${(c.pins || []).length} pins</div>
+      </div>
+      <button data-col-delete="${c.id}" title="Delete"><i class="bi bi-trash3"></i></button>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-col-delete]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.colDelete;
+      const cols2 = getCollections().filter(c => c.id !== id);
+      saveCollections(cols2);
+      window.showToast('Collection removed', 'success');
+    };
+  });
+  list.querySelectorAll('.collection-item').forEach(item => {
+    item.onclick = () => {
+      const id = item.dataset.colId;
+      const col = getCollections().find(c => c.id === id);
+      if (!col) return;
+      const pins = (window._lastPins || []).filter(p => (col.pins || []).includes(p.pin_id));
+      if (!pins.length) {
+        window.showToast('No pins from current results in this collection', 'info');
+        return;
+      }
+      allPins = pins;
+      applyFilterAndSort();
+      closeAllPanels();
+      window.showToast(`Showing "${col.name}" (${pins.length})`, 'success');
     };
   });
 }
 
+function updateNavBadges() {
+  const cols = getCollections();
+  const colBadge = $('nav-collections-count');
+  if (colBadge) colBadge.textContent = cols.length;
+  refreshSchedulesBadge();
+}
+
+async function refreshSchedulesBadge() {
+  try {
+    const res = await fetch('/api/schedules');
+    if (res.ok) {
+      const data = await res.json();
+      const badge = $('nav-schedules-count');
+      if (badge) badge.textContent = (data.schedules || []).length;
+      renderSchedules(data.schedules || []);
+    }
+  } catch {}
+}
+
+function renderSchedules(list) {
+  const el = $('schedules-list');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = `<div class="panel-empty"><i class="bi bi-clock"></i><span>No active schedules</span></div>`;
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <div class="schedule-item">
+      <div class="schedule-item-info">
+        <div class="schedule-item-title">${escapeHtml(s.query)}</div>
+        <div class="schedule-item-meta">${escapeHtml(s.mode)} · every ${s.interval_hours}h · limit ${s.limit}${s.runs ? ' · ran ' + s.runs + 'x' : ''}</div>
+      </div>
+      <button data-sch-delete="${s.id}" title="Delete"><i class="bi bi-trash3"></i></button>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-sch-delete]').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.schDelete;
+      try {
+        await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
+        window.showToast('Schedule removed', 'success');
+        refreshSchedulesBadge();
+      } catch {
+        window.showError('Delete failed');
+      }
+    };
+  });
+}
+
+async function addSchedule() {
+  const q = $('sch-query').value.trim();
+  if (!q) { window.showError('Enter a query'); return; }
+  const body = {
+    mode: $('sch-mode').value,
+    query: q,
+    interval_hours: +$('sch-interval').value || 24,
+    limit: +$('sch-limit').value || 25,
+  };
+  try {
+    const res = await fetch('/api/schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('Failed');
+    window.showToast('Schedule created', 'success');
+    $('sch-query').value = '';
+    refreshSchedulesBadge();
+    addHistory({ type: 'schedule', query: q });
+  } catch {
+    window.showError('Failed to create schedule');
+  }
+}
+
+// ====== History ======
+function renderHistory() {
+  const list = $('history-list');
+  if (!list) return;
+  const hist = getHistory();
+  if (!hist.length) {
+    list.innerHTML = `<div class="panel-empty"><i class="bi bi-clock-history"></i><span>No history yet</span></div>`;
+    return;
+  }
+  list.innerHTML = hist.slice(0, 60).map((h, i) => {
+    const icon = h.type === 'search' ? 'bi-search' :
+                 h.type === 'visual' ? 'bi-stars' :
+                 h.type === 'schedule' ? 'bi-clock-history' :
+                 h.type === 'result' ? 'bi-check-circle' :
+                 h.type === 'delete' ? 'bi-trash3' : 'bi-activity';
+    const when = new Date(h.ts).toLocaleString();
+    const title = h.query || h.pin_id || h.type;
+    const meta = `${h.type}${h.count != null ? ' · ' + h.count + ' pins' : ''} · ${when}`;
+    return `<div class="history-item" data-hist-idx="${i}">
+      <div class="history-item-info">
+        <div class="history-item-title"><i class="bi ${icon}" style="color:var(--text-muted);margin-right:6px;"></i>${escapeHtml(title)}</div>
+        <div class="history-item-meta">${escapeHtml(meta)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openHistoryPanel() {
+  renderHistory();
+  openPanel('history-panel');
+}
+
+// ====== Side panels ======
+function closeAllPanels() {
+  $$('.side-panel').forEach(p => p.classList.remove('open'));
+  closePinDetail();
+  closeContextMenu();
+  closeSortMenu();
+}
+function openPanel(id) {
+  closeAllPanels();
+  const p = document.getElementById(id);
+  if (p) {
+    p.classList.add('open');
+    p.setAttribute('aria-hidden', 'false');
+  }
+}
+function openSchedulesPanel() { refreshSchedulesBadge(); openPanel('schedules-panel'); }
+function openCollectionsPanel() { renderCollections(); openPanel('collections-panel'); }
+
+// ====== Selection ======
 function setSelectionMode(on) {
   selectionMode = on;
-  document.querySelectorAll('.pin-card').forEach(c =>
-    c.classList.toggle('selectable', on)
-  );
+  document.querySelectorAll('.pin-card').forEach(c => c.classList.toggle('selectable', on));
   if (!on) {
     selectedFiles.clear();
-    document.querySelectorAll('.pin-card.selected').forEach(c =>
-      c.classList.remove('selected')
-    );
+    document.querySelectorAll('.pin-card.selected').forEach(c => c.classList.remove('selected'));
   }
   updateSelBar();
 }
-
 function updateSelBar() {
   const bar = document.getElementById('selection-bar');
   bar.classList.toggle('show', selectionMode);
   bar.classList.toggle('hidden', !selectionMode);
   document.getElementById('sel-count').textContent = `${selectedFiles.size} selected`;
 }
-
 function toggleSelect(card) {
   const pin = card._pin;
   if (!pin || !pin.local_file) {
@@ -959,34 +1435,80 @@ function toggleSelect(card) {
   updateSelBar();
 }
 
+async function bulkDownloadSelected() {
+  if (!selectedFiles.size) return;
+  const pins = (window._lastPins || []).filter(p => selectedFiles.has(p.local_file));
+  let n = 0;
+  for (const p of pins) {
+    const url = `/api/images/${encodeURIComponent(p.local_file)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = p.local_file;
+    a.click();
+    n++;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  window.showToast(`Downloading ${n} file${n === 1 ? '' : 's'}`, 'success');
+}
+
+async function bulkSaveToCollection() {
+  if (!selectedFiles.size) return;
+  const cols = getCollections();
+  if (!cols.length) {
+    window.showToast('Create a collection first', 'info');
+    openCollectionsPanel();
+    return;
+  }
+  const target = cols[0];
+  if (!target.pins) target.pins = [];
+  const pins = (window._lastPins || []).filter(p => selectedFiles.has(p.local_file));
+  let added = 0;
+  for (const p of pins) {
+    if (!target.pins.includes(p.pin_id)) { target.pins.push(p.pin_id); added++; }
+  }
+  saveCollections(cols);
+  window.showToast(`Added ${added} pin${added === 1 ? '' : 's'} to "${target.name}"`, 'success');
+}
+
+// ====== Command Palette ======
 function getCommands() {
   const cmds = [
     { id: 'focus-search', icon: 'bi-search', label: 'Search pins', sub: 'Focus search box',
       action: () => { closeCP(); $('search-input').focus(); } },
     { id: 'open-gallery', icon: 'bi-images', label: 'Open Gallery', sub: 'View downloaded images',
-      action: () => { closeCP(); $('tab-gallery').click(); } },
-    { id: 'open-search-tab', icon: 'bi-house', label: 'Back to Search', sub: 'Return to search view',
-      action: () => { closeCP(); $('tab-search').click(); } },
+      action: () => { closeCP(); showGallery(); } },
+    { id: 'open-schedules', icon: 'bi-clock-history', label: 'Open Schedules', sub: 'Manage recurring scrapes',
+      action: () => { closeCP(); openSchedulesPanel(); } },
+    { id: 'open-collections', icon: 'bi-bookmark-heart', label: 'Open Collections', sub: 'Saved pin groups',
+      action: () => { closeCP(); openCollectionsPanel(); } },
+    { id: 'open-history', icon: 'bi-arrow-counterclockwise', label: 'Open History', sub: 'Recent activity',
+      action: () => { closeCP(); openHistoryPanel(); } },
     { id: 'toggle-theme', icon: 'bi-circle-half', label: 'Toggle theme', sub: 'Switch light / dark',
       action: () => { closeCP(); $('theme-btn').click(); } },
+    { id: 'toggle-focus', icon: 'bi-fullscreen', label: 'Toggle focus mode', sub: 'Hide chrome',
+      action: () => { closeCP(); toggleFocusMode(); } },
     { id: 'open-settings', icon: 'bi-gear-fill', label: 'Open Settings', sub: 'Configure options',
       action: () => { closeCP(); $('settings-btn').click(); } },
-    { id: 'density-comfortable', icon: 'bi-grid-3x3', label: 'Density: Comfortable', sub: 'Large cards',
-      action: () => { closeCP(); applyDensity('comfortable'); } },
-    { id: 'density-default', icon: 'bi-grid', label: 'Density: Default', sub: 'Balanced layout',
-      action: () => { closeCP(); applyDensity('default'); } },
-    { id: 'density-compact', icon: 'bi-grid-3x3-gap', label: 'Density: Compact', sub: 'More cards',
-      action: () => { closeCP(); applyDensity('compact'); } },
+    { id: 'view-masonry', icon: 'bi-columns-gap', label: 'Masonry view', sub: 'Pin columns',
+      action: () => { closeCP(); applyViewMode('masonry'); } },
+    { id: 'view-grid', icon: 'bi-grid-3x3-gap', label: 'Grid view', sub: 'Uniform grid',
+      action: () => { closeCP(); applyViewMode('grid'); } },
+    { id: 'view-list', icon: 'bi-list-ul', label: 'List view', sub: 'Row layout',
+      action: () => { closeCP(); applyViewMode('list'); } },
+    { id: 'reset-filters', icon: 'bi-funnel', label: 'Reset filters', sub: 'Clear filter & sort',
+      action: () => {
+        closeCP();
+        activeFilter = 'all'; activeSort = 'newest';
+        updateFilterChips(); updateSortLabel();
+        applyFilterAndSort();
+      } },
   ];
-  const zip = $('exp-zip');
-  if (zip && !zip.classList.contains('hidden')) {
-    cmds.push({ id: 'download-zip', icon: 'bi-file-zip', label: 'Download ZIP', sub: 'Images as archive',
-      action: () => { closeCP(); zip.click(); } });
-  }
-  const xlsx = $('exp-xlsx');
-  if (xlsx && !xlsx.classList.contains('hidden')) {
-    cmds.push({ id: 'export-xlsx', icon: 'bi-file-spreadsheet', label: 'Export XLSX', sub: 'Metadata spreadsheet',
-      action: () => { closeCP(); xlsx.click(); } });
+  if (currentView === 'gallery') {
+    cmds.push({ id: 'gallery-zip', icon: 'bi-file-zip', label: 'Download gallery ZIP', sub: 'All images',
+      action: () => { closeCP(); $('exp-zip')?.click(); } });
+  } else if (lastPins.length) {
+    cmds.push({ id: 'export-xlsx', icon: 'bi-file-spreadsheet', label: 'Export XLSX', sub: 'Metadata',
+      action: () => { closeCP(); $('exp-xlsx')?.click(); } });
   }
   return cmds;
 }
@@ -994,9 +1516,25 @@ function getCommands() {
 let cpIndex = -1;
 let cpItems = [];
 
+function fuzzyScore(text, q) {
+  if (!q) return 1;
+  text = text.toLowerCase(); q = q.toLowerCase();
+  let score = 0, ti = 0, qi = 0, consec = 0;
+  while (ti < text.length && qi < q.length) {
+    if (text[ti] === q[qi]) {
+      score += 10 + consec * 4;
+      if (ti === 0 || text[ti - 1] === ' ' || text[ti - 1] === '-') score += 6;
+      consec++;
+      qi++;
+    } else consec = 0;
+    ti++;
+  }
+  return qi === q.length ? score - text.length * 0.05 : 0;
+}
+
 function renderCP(query = '') {
   const cpBody = $('cp-body');
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   const sections = [];
   const commands = getCommands();
 
@@ -1009,31 +1547,25 @@ function renderCP(query = '') {
           icon: 'bi-clock-history',
           label: r,
           sub: 'Recent search',
-          action: () => {
-            closeCP();
-            $('search-input').value = r;
-            startScrape();
-          },
+          action: () => { closeCP(); $('search-input').value = r; startScrape(); },
         })),
       });
     }
     sections.push({ title: 'Commands', items: commands });
   } else {
-    const matched = commands.filter(c =>
-      c.label.toLowerCase().includes(q) || c.sub.toLowerCase().includes(q)
-    );
-    if (matched.length) sections.push({ title: 'Commands', items: matched });
+    const scored = commands
+      .map(c => ({ c, s: Math.max(fuzzyScore(c.label, q), fuzzyScore(c.sub || '', q) * 0.7) }))
+      .filter(x => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map(x => x.c);
+    if (scored.length) sections.push({ title: 'Commands', items: scored });
     sections.push({
       title: 'Search',
       items: [{
         icon: 'bi-search',
         label: `Search for "${query}"`,
         sub: 'Start scrape',
-        action: () => {
-          closeCP();
-          $('search-input').value = query;
-          startScrape();
-        },
+        action: () => { closeCP(); $('search-input').value = query; startScrape(); },
       }],
     });
   }
@@ -1054,13 +1586,7 @@ function renderCP(query = '') {
       </div>`;
     });
   });
-
-  cpBody.innerHTML = html ||
-    `<div class="cp-empty">
-      <i class="bi bi-search" style="font-size:1.6rem;display:block;margin-bottom:10px;opacity:.4"></i>
-      No results
-    </div>`;
-
+  cpBody.innerHTML = html || `<div class="cp-empty"><i class="bi bi-search" style="font-size:1.6rem;display:block;margin-bottom:10px;opacity:.4"></i>No results</div>`;
   cpBody.querySelectorAll('.cp-item').forEach(el => {
     el.addEventListener('mouseenter', () => setCPIndex(+el.dataset.idx));
     el.addEventListener('click', () => {
@@ -1070,17 +1596,13 @@ function renderCP(query = '') {
   });
   setCPIndex(0);
 }
-
 function setCPIndex(i) {
   cpIndex = i;
   const cpBody = $('cp-body');
-  cpBody.querySelectorAll('.cp-item').forEach((el, n) =>
-    el.classList.toggle('active', n === i)
-  );
+  cpBody.querySelectorAll('.cp-item').forEach((el, n) => el.classList.toggle('active', n === i));
   const el = cpBody.querySelector(`.cp-item[data-idx="${i}"]`);
   if (el) el.scrollIntoView({ block: 'nearest' });
 }
-
 function openCP() {
   const cp = $('command-palette');
   const cpInput = $('cp-input');
@@ -1090,21 +1612,99 @@ function openCP() {
   renderCP('');
   setTimeout(() => cpInput.focus(), 50);
 }
-
 function closeCP() {
   const cp = $('command-palette');
   cp.classList.remove('open');
   cp.setAttribute('aria-hidden', 'true');
 }
 
+// ====== Context Menu ======
+let contextMenuTarget = null;
+function openContextMenu(x, y, pin) {
+  contextMenuTarget = pin;
+  const menu = $('context-menu');
+  const actions = [
+    { icon: 'bi-eye', label: 'Open details', fn: () => openPinDetail(pin) },
+    { icon: 'bi-bookmark-plus', label: 'Save to collection', fn: () => quickSaveToCollection(pin) },
+    { icon: 'bi-stars', label: 'Find similar', fn: () => runVisualSearch(pin.pin_id) },
+    { icon: 'bi-link-45deg', label: 'Copy link', fn: () => {
+      const url = pin.pin_url || pin.image_url || '';
+      if (url) { navigator.clipboard?.writeText(url); window.showToast('Link copied', 'success'); }
+    } },
+    { sep: true },
+    { icon: 'bi-download', label: 'Save image', fn: () => {
+      const src = pin.local_file ? `/api/images/${encodeURIComponent(pin.local_file)}` : pin.image_url;
+      if (src) window.open(src, '_blank');
+    } },
+  ];
+  if (pin.local_file) {
+    actions.push({ icon: 'bi-trash3', label: 'Remove from disk', danger: true, fn: () => quickRemovePin(pin) });
+  }
+  menu.innerHTML = actions.map(a => {
+    if (a.sep) return '<div class="context-sep"></div>';
+    return `<button class="${a.danger ? 'danger' : ''}" data-ctx><i class="bi ${a.icon}"></i>${escapeHtml(a.label)}</button>`;
+  }).join('');
+  const btns = menu.querySelectorAll('button[data-ctx]');
+  let idx = 0;
+  actions.forEach(a => {
+    if (a.sep) return;
+    btns[idx].onclick = () => { closeContextMenu(); a.fn(); };
+    idx++;
+  });
+  menu.classList.remove('hidden');
+  const rect = menu.getBoundingClientRect();
+  const mw = 220, mh = rect.height || 260;
+  menu.style.left = Math.min(x, window.innerWidth - mw - 12) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - mh - 12) + 'px';
+}
+function closeContextMenu() {
+  const menu = $('context-menu');
+  menu.classList.add('hidden');
+  contextMenuTarget = null;
+}
+
+// ====== Sort Menu ======
+function openSortMenu() { $('sort-menu').classList.remove('hidden'); }
+function closeSortMenu() { $('sort-menu').classList.add('hidden'); }
+
+// ====== View mode ======
+function applyViewMode(mode) {
+  viewMode = mode;
+  document.body.dataset.viewMode = mode;
+  try { localStorage.setItem(STORAGE_KEYS.viewMode, mode); } catch {}
+  $$('#view-modes button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+}
+function initViewMode() {
+  let saved = 'masonry';
+  try { saved = localStorage.getItem(STORAGE_KEYS.viewMode) || 'masonry'; } catch {}
+  applyViewMode(saved);
+}
+
+// ====== Focus mode ======
+function toggleFocusMode() {
+  const on = document.body.classList.toggle('focus-mode');
+  if (on) {
+    let exit = document.querySelector('.focus-exit');
+    if (!exit) {
+      exit = document.createElement('button');
+      exit.className = 'focus-exit';
+      exit.innerHTML = '<i class="bi bi-fullscreen-exit"></i> Exit focus';
+      exit.onclick = toggleFocusMode;
+      document.body.appendChild(exit);
+    }
+  } else {
+    const exit = document.querySelector('.focus-exit');
+    if (exit) exit.remove();
+  }
+}
+
+// ====== Density ======
 function applyDensity(density) {
   const btns = $$('#density-toggle button');
   btns.forEach(x => x.classList.toggle('active', x.dataset.density === density));
   document.body.dataset.density = density;
-  try { localStorage.setItem('ps_density', density); } catch {}
-  window.showToast(`Layout: ${density}`, 'info', 1500);
+  try { localStorage.setItem(STORAGE_KEYS.density, density); } catch {}
 }
-
 function initDensity() {
   const container = $('density-toggle');
   if (!container) return;
@@ -1114,131 +1714,114 @@ function initDensity() {
     e.preventDefault();
     applyDensity(btn.dataset.density);
   });
-  let savedDensity = 'default';
-  try { savedDensity = localStorage.getItem('ps_density') || 'default'; } catch {}
-  const btns = $$('#density-toggle button');
-  btns.forEach(b => b.classList.toggle('active', b.dataset.density === savedDensity));
-  document.body.dataset.density = savedDensity;
+  let saved = 'default';
+  try { saved = localStorage.getItem(STORAGE_KEYS.density) || 'default'; } catch {}
+  applyDensity(saved);
 }
 
-function initSort() {
-  const sortModes = [
-    { label: 'Newest', icon: 'bi-sort-down' },
-    { label: 'Popular', icon: 'bi-fire' },
-    { label: 'Oldest', icon: 'bi-sort-up' },
-  ];
-  let sortIdx = 0;
-  const btn = $('sort-btn');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    sortIdx = (sortIdx + 1) % sortModes.length;
-    const m = sortModes[sortIdx];
-    btn.innerHTML = `<i class="bi ${m.icon}"></i><span>${m.label}</span>`;
-  });
-}
+// ====== Sidebar ======
+function initSidebar() {
+  let state = 'expanded';
+  try { state = localStorage.getItem(STORAGE_KEYS.sidebar) || 'expanded'; } catch {}
+  document.body.dataset.sidebar = state;
 
-function initCommandPalette() {
-  const cp = $('command-palette');
-  const cpInput = $('cp-input');
-  const cpBackdrop = cp.querySelector('.cp-backdrop');
-  if (cpBackdrop) cpBackdrop.addEventListener('click', closeCP);
-
-  const kbdTrigger = $('search-kbd');
-  if (kbdTrigger) {
-    kbdTrigger.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openCP();
-    });
+  const collapse = $('sidebar-collapse');
+  if (collapse) {
+    collapse.onclick = () => {
+      const next = document.body.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
+      document.body.dataset.sidebar = next;
+      try { localStorage.setItem(STORAGE_KEYS.sidebar, next); } catch {}
+    };
   }
-
-  cpInput.addEventListener('input', () => renderCP(cpInput.value));
-  cpInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeCP(); return; }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setCPIndex(Math.min(cpIndex + 1, cpItems.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setCPIndex(Math.max(cpIndex - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const it = cpItems[cpIndex];
-      if (it) it.action();
-    }
-  });
-
-  document.addEventListener('keydown', (e) => {
-    const mod = e.metaKey || e.ctrlKey;
-    const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
-    if (mod && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      if (cp.classList.contains('open')) closeCP();
-      else openCP();
-    } else if (e.key === '/' && !cp.classList.contains('open') && !isInput) {
-      e.preventDefault();
-      $('search-input').focus();
-    }
-  });
+  const mobileToggle = $('mobile-sidebar-toggle');
+  if (mobileToggle) {
+    mobileToggle.onclick = () => {
+      const open = document.body.dataset.sidebar === 'mobile-open';
+      document.body.dataset.sidebar = open ? 'expanded' : 'mobile-open';
+    };
+  }
+  // Mobile overlay
+  let mo = document.querySelector('.mobile-overlay');
+  if (!mo) {
+    mo = document.createElement('div');
+    mo.className = 'mobile-overlay';
+    document.body.appendChild(mo);
+    mo.onclick = () => { if (window.innerWidth <= 860) closeMobileSidebar(); };
+  }
+}
+function closeMobileSidebar() {
+  if (document.body.dataset.sidebar === 'mobile-open') {
+    document.body.dataset.sidebar = 'expanded';
+  }
 }
 
+// ====== URL state ======
+function pushURLState(extra = {}) {
+  const params = new URLSearchParams();
+  const q = $('search-input').value.trim();
+  if (q) params.set('q', q);
+  if (activeFilter !== 'all') params.set('filter', activeFilter);
+  if (activeSort !== 'newest') params.set('sort', activeSort);
+  if (viewMode !== 'masonry') params.set('view', viewMode);
+  const url = params.toString() ? '?' + params.toString() : '';
+  try { history.replaceState(null, '', url); } catch {}
+}
+function readURLState() {
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get('q');
+  if (q) $('search-input').value = q;
+  const f = params.get('filter');
+  if (f) activeFilter = f;
+  const s = params.get('sort');
+  if (s) activeSort = s;
+  const v = params.get('view');
+  if (v) viewMode = v;
+  updateFilterChips();
+  updateSortLabel();
+  applyViewMode(viewMode);
+  if (q) setTimeout(() => startScrape(), 200);
+}
+
+// ====== Events ======
 function initSuggestions() {
   const sugList = $('suggest-list');
   const input = $('search-input');
   if (!sugList || !input) return;
-
   let debounceTimer = null;
   let sugItems = [];
   let sugIndex = -1;
   let sugAbort = null;
-
-  function hideSuggest() {
-    sugList.classList.remove('show');
-    sugList.innerHTML = '';
-    sugItems = [];
-    sugIndex = -1;
-  }
-
+  function hideSuggest() { sugList.classList.remove('show'); sugList.innerHTML = ''; sugItems = []; sugIndex = -1; }
   function highlight(q, text) {
     const i = text.toLowerCase().indexOf(q.toLowerCase());
     if (i < 0) return escapeHtml(text);
-    return escapeHtml(text.slice(0, i)) +
-      '<b>' + escapeHtml(text.slice(i, i + q.length)) + '</b>' +
-      escapeHtml(text.slice(i + q.length));
+    return escapeHtml(text.slice(0, i)) + '<b>' + escapeHtml(text.slice(i, i + q.length)) + '</b>' + escapeHtml(text.slice(i + q.length));
   }
-
   function renderSuggest(q, items) {
     sugItems = items;
     sugIndex = -1;
     sugList.innerHTML = items.map(s => {
       if (s.type === 'user') {
         return `<li role="option" class="sug-user">
-          <img class="sug-avatar" src="${s.image || ''}" alt="" loading="lazy"
-               onerror="this.style.visibility='hidden'">
+          <img class="sug-avatar" src="${s.image || ''}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
           <span class="sug-texts">
-            <span class="sug-name">${highlight(q, s.text)}
-              ${s.verified ? `<span class="sug-verified"><i class="bi bi-patch-check-fill"></i></span>` : ''}
-            </span>
+            <span class="sug-name">${highlight(q, s.text)}${s.verified ? ` <span class="sug-verified"><i class="bi bi-patch-check-fill"></i></span>` : ''}</span>
             ${s.sub ? `<span class="sug-sub">${escapeHtml(s.sub)}</span>` : ''}
           </span>
         </li>`;
       }
-      return `<li role="option">
-        <span class="sug-ico"><i class="bi bi-search"></i></span>
-        <span>${highlight(q, s.text)}</span>
-      </li>`;
+      return `<li role="option"><span class="sug-ico"><i class="bi bi-search"></i></span><span>${highlight(q, s.text)}</span></li>`;
     }).join('');
     sugList.classList.toggle('show', items.length > 0);
-    [...sugList.children].forEach((li, i) =>
+    [...sugList.children].forEach((li, i) => {
       li.addEventListener('mousedown', (e) => {
         e.preventDefault();
         input.value = sugItems[i].text;
         hideSuggest();
         startScrape();
-      })
-    );
+      });
+    });
   }
-
   input.addEventListener('input', () => {
     const box = input.closest('.search-box');
     if (box) box.classList.toggle('has-value', input.value.length > 0);
@@ -1249,23 +1832,18 @@ function initSuggestions() {
       if (sugAbort) sugAbort.abort();
       sugAbort = new AbortController();
       try {
-        const r = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`, {
-          signal: sugAbort.signal,
-        });
+        const r = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`, { signal: sugAbort.signal });
         const { suggestions } = await r.json();
         if (input.value.trim() === q) renderSuggest(q, suggestions || []);
       } catch {}
     }, 350);
   });
-
   input.addEventListener('keydown', (e) => {
     if (sugItems.length === 0) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       sugIndex = (sugIndex + (e.key === 'ArrowDown' ? 1 : -1) + sugItems.length) % sugItems.length;
-      [...sugList.children].forEach((li, i) =>
-        li.classList.toggle('active', i === sugIndex)
-      );
+      [...sugList.children].forEach((li, i) => li.classList.toggle('active', i === sugIndex));
     } else if (e.key === 'Enter') {
       if (sugIndex >= 0 && sugItems[sugIndex]) {
         e.preventDefault();
@@ -1273,16 +1851,12 @@ function initSuggestions() {
         hideSuggest();
         startScrape();
       }
-    } else if (e.key === 'Escape') {
-      hideSuggest();
-    }
+    } else if (e.key === 'Escape') hideSuggest();
   });
-
   input.addEventListener('blur', () => setTimeout(hideSuggest, 150));
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-box')) hideSuggest();
   });
-
   const clearBtn = $('search-clear');
   if (clearBtn) {
     clearBtn.addEventListener('click', (e) => {
@@ -1297,6 +1871,130 @@ function initSuggestions() {
   }
 }
 
+function initCommandPalette() {
+  const cp = $('command-palette');
+  const cpInput = $('cp-input');
+  const cpBackdrop = cp.querySelector('.cp-backdrop');
+  if (cpBackdrop) cpBackdrop.addEventListener('click', closeCP);
+  const kbdTrigger = $('search-kbd');
+  if (kbdTrigger) {
+    kbdTrigger.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openCP();
+    });
+  }
+  cpInput.addEventListener('input', () => renderCP(cpInput.value));
+  cpInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeCP(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCPIndex(Math.min(cpIndex + 1, cpItems.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setCPIndex(Math.max(cpIndex - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const it = cpItems[cpIndex]; if (it) it.action(); }
+  });
+}
+
+function initKeyboard() {
+  document.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement || {}).tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    const mod = e.metaKey || e.ctrlKey;
+
+    // Cmd/Ctrl+K
+    if (mod && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const cp = $('command-palette');
+      if (cp.classList.contains('open')) closeCP(); else openCP();
+      return;
+    }
+    // Cmd/Ctrl+B - toggle sidebar
+    if (mod && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      const next = document.body.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
+      document.body.dataset.sidebar = next;
+      try { localStorage.setItem(STORAGE_KEYS.sidebar, next); } catch {}
+      return;
+    }
+
+    if (isInput) return;
+
+    // /
+    if (e.key === '/') { e.preventDefault(); $('search-input').focus(); return; }
+    // ?
+    if (e.key === '?') { e.preventDefault(); openShortcuts(); return; }
+    // Escape
+    if (e.key === 'Escape') {
+      const cp = $('command-palette');
+      const drawer = $('settings-drawer');
+      const modal = $('pin-modal');
+      const shortcuts = $('shortcuts-overlay');
+      if (shortcuts.classList.contains('open')) { closeShortcuts(); return; }
+      if (cp.classList.contains('open')) { closeCP(); return; }
+      if (drawer.classList.contains('open')) { openDrawer(false); return; }
+      if (modal.classList.contains('open')) { closePinModal(); return; }
+      if ($('pin-detail').classList.contains('open')) { closePinDetail(); return; }
+      if (document.querySelector('.side-panel.open')) { closeAllPanels(); return; }
+      if (selectionMode) { setSelectionMode(false); return; }
+      if (document.body.classList.contains('focus-mode')) { toggleFocusMode(); return; }
+    }
+    // F - focus mode
+    if (e.key.toLowerCase() === 'f' && !mod) {
+      // Only if no modal open
+      if (!$('pin-modal').classList.contains('open') && !$('command-palette').classList.contains('open')) {
+        e.preventDefault();
+        toggleFocusMode();
+      }
+      return;
+    }
+    // S - toggle sidebar
+    if (e.key.toLowerCase() === 's' && !mod) {
+      if (!$('pin-modal').classList.contains('open')) {
+        e.preventDefault();
+        const next = document.body.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
+        document.body.dataset.sidebar = next;
+        try { localStorage.setItem(STORAGE_KEYS.sidebar, next); } catch {}
+      }
+      return;
+    }
+    // G - gallery
+    if (e.key.toLowerCase() === 'g') { e.preventDefault(); showGallery(); return; }
+    // D - dark
+    if (e.key.toLowerCase() === 'd') { e.preventDefault(); $('theme-btn').click(); return; }
+    // 1/2/3 - view mode
+    if (e.key === '1') { e.preventDefault(); applyViewMode('masonry'); return; }
+    if (e.key === '2') { e.preventDefault(); applyViewMode('grid'); return; }
+    if (e.key === '3') { e.preventDefault(); applyViewMode('list'); return; }
+    // 0 - reset filters
+    if (e.key === '0') {
+      e.preventDefault();
+      activeFilter = 'all'; activeSort = 'newest';
+      updateFilterChips(); updateSortLabel();
+      applyFilterAndSort();
+      window.showToast('Filters cleared', 'info', 1500);
+      return;
+    }
+    // Arrows in modal
+    const modal = $('pin-modal');
+    if (modal.classList.contains('open')) {
+      if (e.key === 'ArrowLeft') pmNav(-1);
+      if (e.key === 'ArrowRight') pmNav(1);
+    } else if ($('pin-detail').classList.contains('open')) {
+      const pins = filteredPins;
+      if (e.key === 'ArrowLeft') { renderPinDetail(pins, pmIndex - 1); pmIndex = Math.max(0, pmIndex - 1); }
+      if (e.key === 'ArrowRight') { renderPinDetail(pins, pmIndex + 1); pmIndex = Math.min(pins.length - 1, pmIndex + 1); }
+    }
+  });
+}
+
+function openShortcuts() {
+  $('shortcuts-overlay').classList.add('open');
+  $('shortcuts-overlay').setAttribute('aria-hidden', 'false');
+}
+function closeShortcuts() {
+  $('shortcuts-overlay').classList.remove('open');
+  $('shortcuts-overlay').setAttribute('aria-hidden', 'true');
+}
+
+// ====== Wire Events ======
 function wireEvents() {
   const searchForm = $('search-form');
   if (searchForm) {
@@ -1305,78 +2003,124 @@ function wireEvents() {
       startScrape();
     });
   }
-
   $('settings-btn').addEventListener('click', () => {
     syncDrawerFromSettings();
     openDrawer(true);
   });
   $('close-settings').addEventListener('click', () => openDrawer(false));
   $('overlay').addEventListener('click', () => openDrawer(false));
-
   $('reset-settings').addEventListener('click', () => {
     settings = { ...DEFAULTS, mode: 'search' };
     saveSettings();
     syncDrawerFromSettings();
     window.showToast('Settings reset to defaults', 'success', 2200);
   });
-
   const drawer = $('settings-drawer');
   if (drawer) {
     drawer.addEventListener('input', readDrawerToSettings);
     drawer.addEventListener('change', readDrawerToSettings);
   }
 
-  $('tab-search').addEventListener('click', () => {
-    if (currentView !== 'search') showSearch();
+  // Sidebar nav
+  $$('.nav-btn-main').forEach(b => {
+    b.addEventListener('click', () => {
+      const nav = b.dataset.nav;
+      if (nav === 'search') showSearch();
+      else if (nav === 'gallery') showGallery();
+      else if (nav === 'schedules') { setActiveNav('schedules'); openSchedulesPanel(); }
+      else if (nav === 'collections') { setActiveNav('collections'); openCollectionsPanel(); }
+      else if (nav === 'history') { setActiveNav('history'); openHistoryPanel(); }
+      if (window.innerWidth <= 860) closeMobileSidebar();
+    });
   });
-  $('tab-gallery').addEventListener('click', () => {
-    if (currentView !== 'gallery') showGallery();
+  $('clear-recent')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    try { localStorage.removeItem(STORAGE_KEYS.recent); } catch {}
+    renderSidebarRecent();
+    renderRecent();
+  });
+  $('shortcuts-open')?.addEventListener('click', openShortcuts);
+  $('focus-toggle')?.addEventListener('click', toggleFocusMode);
+  $('shortcuts-btn')?.addEventListener('click', openShortcuts);
+  $('shortcuts-close')?.addEventListener('click', closeShortcuts);
+  $('shortcuts-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'shortcuts-overlay') closeShortcuts();
   });
 
+  // Side panels close buttons
+  $$('[data-close-panel]').forEach(b => b.addEventListener('click', closeAllPanels));
+
+  // Filter chips
+  $$('.filter-chip').forEach(ch => {
+    ch.addEventListener('click', () => {
+      const f = ch.dataset.filter;
+      activeFilter = (activeFilter === f && f !== 'all') ? 'all' : f;
+      updateFilterChips();
+      applyFilterAndSort();
+      pushURLState();
+    });
+  });
+
+  // Sort dropdown
+  $('sort-trigger')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('sort-menu');
+    if (menu.classList.contains('hidden')) openSortMenu(); else closeSortMenu();
+  });
+  $$('#sort-menu button').forEach(b => {
+    b.addEventListener('click', () => {
+      activeSort = b.dataset.sort;
+      updateSortLabel();
+      applyFilterAndSort();
+      pushURLState();
+      closeSortMenu();
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#sort-dropdown')) closeSortMenu();
+    if (!e.target.closest('#context-menu')) closeContextMenu();
+  });
+
+  // View modes
+  $$('#view-modes button').forEach(b => {
+    b.addEventListener('click', () => {
+      applyViewMode(b.dataset.mode);
+      pushURLState();
+    });
+  });
+
+  // Bulk toggle
+  $('bulk-toggle')?.addEventListener('click', () => setSelectionMode(!selectionMode));
+
+  // Cancel scrape
   $('cancel-btn').addEventListener('click', async () => {
     if (currentJob) {
       const btn = $('cancel-btn');
       btn.disabled = true;
       btn.innerHTML = '<i class="bi bi-hourglass-split"></i> …';
-      try {
-        await fetch(`/api/jobs/${currentJob}/cancel`, { method: 'POST' });
-      } catch {}
+      try { await fetch(`/api/jobs/${currentJob}/cancel`, { method: 'POST' }); } catch {}
     }
   });
 
+  // Pin modal
   $('close-pin-modal').addEventListener('click', closePinModal);
   $('pm-prev').addEventListener('click', () => pmNav(-1));
   $('pm-next').addEventListener('click', () => pmNav(1));
   $('pin-modal').addEventListener('click', (e) => {
     if (e.target.id === 'pin-modal') closePinModal();
   });
-
   const pmImg = $('pm-img');
   if (pmImg) {
-    pmImg.addEventListener('click', (e) => {
-      e.stopPropagation();
-      pmImg.classList.toggle('zoomed');
-    });
+    pmImg.addEventListener('click', (e) => { e.stopPropagation(); pmImg.classList.toggle('zoomed'); });
   }
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      const drawer = $('settings-drawer');
-      const modal = $('pin-modal');
-      const cp = $('command-palette');
-      if (cp.classList.contains('open')) { closeCP(); return; }
-      if (drawer.classList.contains('open')) { openDrawer(false); return; }
-      if (modal.classList.contains('open')) { closePinModal(); return; }
-      if (selectionMode) { setSelectionMode(false); return; }
-    }
-    const modal = $('pin-modal');
-    if (modal.classList.contains('open')) {
-      if (e.key === 'ArrowLeft') pmNav(-1);
-      if (e.key === 'ArrowRight') pmNav(1);
-    }
-  });
+  // Pin detail
+  $('detail-close')?.addEventListener('click', closePinDetail);
 
+  // Selection bar
   $('sel-cancel').addEventListener('click', () => setSelectionMode(false));
+  $('sel-download')?.addEventListener('click', bulkDownloadSelected);
+  $('sel-collection')?.addEventListener('click', bulkSaveToCollection);
   $('sel-delete').addEventListener('click', async () => {
     if (!selectedFiles.size) return;
     const deleteBtn = $('sel-delete');
@@ -1393,20 +2137,28 @@ function wireEvents() {
       selectedCards.forEach(c => c.classList.add('deleting'));
       await new Promise(r => setTimeout(r, 320));
       selectedCards.forEach(c => c.remove());
-
       const deletedSet = new Set(toDelete);
+      const removedPins = lastPins.filter(p => p.local_file && deletedSet.has(p.local_file));
       lastPins = lastPins.filter(p => !p.local_file || !deletedSet.has(p.local_file));
       allPins = allPins.filter(p => !p.local_file || !deletedSet.has(p.local_file));
       window._lastPins = lastPins;
+      addHistory({ type: 'delete', count: deleted });
 
+      // Undo
+      const snapshot = [...removedPins];
       setSelectionMode(false);
       await updateGalleryBadge();
-      window.showToast(`${deleted} image${deleted === 1 ? '' : 's'} deleted`, 'success');
+      window.showToast(`${deleted} image${deleted === 1 ? '' : 's'} deleted`, 'success', 6000, {
+        label: 'Undo',
+        onClick: () => {
+          // Note: Undo just restores UI state; actual file deletion cannot be reverted server-side.
+          // We keep it as informational.
+          window.showToast('File already deleted from disk', 'info', 2400);
+        },
+      });
       $('stats-card').innerHTML = `
         <div class="stats-header">
-          <span class="stats-title">
-            <i class="bi bi-trash3"></i> ${deleted} images deleted
-          </span>
+          <span class="stats-title"><i class="bi bi-trash3"></i> ${deleted} images deleted</span>
           ${currentView === 'gallery' ? `<span class="stats-query">${lastPins.length} pins remaining</span>` : ''}
         </div>`;
       $('stats-card').classList.remove('hidden');
@@ -1417,13 +2169,24 @@ function wireEvents() {
     }
   });
 
-  const shortcutsBtn = $('shortcuts-btn');
-  if (shortcutsBtn) {
-    shortcutsBtn.addEventListener('click', () => {
-      window.showToast('⌘K search · / focus · ESC close · ← → navigate · long-press select', 'info', 6000);
-    });
-  }
+  // Schedules
+  $('sch-add')?.addEventListener('click', addSchedule);
 
+  // Collections
+  $('col-add')?.addEventListener('click', () => {
+    const name = $('col-name').value.trim();
+    if (!name) { window.showError('Enter a name'); return; }
+    const cols = getCollections();
+    cols.push({ id: 'c' + Math.random().toString(36).slice(2, 10), name, pins: [], created: Date.now() });
+    saveCollections(cols);
+    $('col-name').value = '';
+    window.showToast(`Collection "${name}" created`, 'success');
+  });
+
+  // History
+  $('history-clear')?.addEventListener('click', clearHistory);
+
+  // Long-press select on cards
   document.addEventListener('pointerdown', (e) => {
     const card = e.target.closest('.pin-card');
     if (!card || selectionMode) return;
@@ -1437,16 +2200,12 @@ function wireEvents() {
       toggleSelect(card);
     }, 400);
   });
-
   ['pointerup', 'pointerleave', 'pointercancel', 'scroll'].forEach(ev =>
     document.addEventListener(ev, () => {
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      document.querySelectorAll('.pin-card.holding').forEach(c =>
-        c.classList.remove('holding')
-      );
+      document.querySelectorAll('.pin-card.holding').forEach(c => c.classList.remove('holding'));
     }, true)
   );
-
   document.addEventListener('click', (e) => {
     if (Date.now() < suppressClickUntil) {
       e.stopPropagation();
@@ -1461,12 +2220,14 @@ function wireEvents() {
     toggleSelect(card);
   }, true);
 
+  // Infinite scroll
   const _io = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) loadMore();
   }, { rootMargin: '600px' });
   const _sentinel = document.getElementById('scroll-sentinel');
   if (_sentinel) _io.observe(_sentinel);
 
+  // Auto-hide hero when grid has cards
   const hero = $('hero');
   const grid = $('grid');
   if (hero && grid) {
@@ -1478,29 +2239,42 @@ function wireEvents() {
   }
 
   window.addEventListener('resize', () => {
-    moveIndicator();
+    if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') {
+      document.body.dataset.sidebar = 'expanded';
+    }
   });
   window.addEventListener('orientationchange', () => {
-    setTimeout(moveIndicator, 200);
+    setTimeout(() => { if (window.innerWidth > 860 && document.body.dataset.sidebar === 'mobile-open') document.body.dataset.sidebar = 'expanded'; }, 200);
   });
-  setTimeout(moveIndicator, 50);
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => moveIndicator());
-  }
+
+  // Keyboard
+  initKeyboard();
+
+  // URL state on load
+  readURLState();
 }
 
+// ====== Init ======
 function init() {
   syncDrawerFromSettings();
   updateGalleryBadge();
+  refreshSchedulesBadge();
   checkHealth();
   setInterval(checkHealth, 30000);
   initTheme();
   initDensity();
-  initSort();
+  initViewMode();
+  initSidebar();
   initCommandPalette();
   initSuggestions();
-  wireEvents();
   renderRecent();
+  renderSidebarRecent();
+  renderHistory();
+  renderCollections();
+  updateNavBadges();
+  updateFilterChips();
+  updateSortLabel();
+  wireEvents();
   const sb = $('search-input');
   if (sb) {
     sb.addEventListener('input', () => {
