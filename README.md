@@ -11,7 +11,7 @@
 
 <br>
 
-**A production-ready Pinterest scraper with a premium black & white web UI.**  
+**A production-ready Pinterest scraper with a premium web UI.**  
 Search, board-scrape, download, deduplicate, export — all from a single interface.
 
 <br>
