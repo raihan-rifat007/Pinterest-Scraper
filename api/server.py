@@ -29,7 +29,6 @@ from core.storage import save_outputs
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-
 class ScrapeRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -46,7 +45,6 @@ class ScrapeRequest(BaseModel):
     min_width: int = Field(default=0, ge=0, le=10000)
     min_height: int = Field(default=0, ge=0, le=10000)
     proxy: str = ""
-
 
 class Job:
     def __init__(self, req: ScrapeRequest, out_dir: Path):
@@ -198,13 +196,10 @@ class Job:
                   json_file=str(summary.get("json", "")),
                   csv_file=str(summary.get("csv", "")))
 
-
 JOBS: dict[str, Job] = {}
-
 
 def _out_dir() -> Path:
     return Path("web_output")
-
 
 app = FastAPI(
     title="Pinterest Scraper API",
@@ -213,7 +208,6 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
-
 
 def _custom_openapi():
     if app.openapi_schema:
@@ -227,12 +221,9 @@ def _custom_openapi():
     app.openapi_schema = schema
     return app.openapi_schema
 
-
 app.openapi = _custom_openapi
 
-
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
 
 DOCS_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -2542,7 +2533,6 @@ body[data-theme="dark"] .hero-grid {
 </html>
 """
 
-
 @app.get("/docs", include_in_schema=False)
 async def custom_docs():
     try:
@@ -2554,22 +2544,18 @@ async def custom_docs():
     html = DOCS_HTML.replace("__SPEC_JSON__", spec_json)
     return HTMLResponse(html)
 
-
 @app.get("/redoc", include_in_schema=False)
 async def custom_redoc():
     from fastapi.openapi.docs import get_redoc_html
     return get_redoc_html(openapi_url=app.openapi_url, title="Pinterest Scraper · ReDoc")
 
-
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
 
-
 @app.get("/api/health")
 def health():
     return {"ok": True}
-
 
 @app.post("/api/scrape")
 def start_scrape(req: ScrapeRequest):
@@ -2577,7 +2563,6 @@ def start_scrape(req: ScrapeRequest):
     JOBS[job.id] = job
     threading.Thread(target=job.run, daemon=True).start()
     return {"job_id": job.id}
-
 
 @app.get("/api/jobs/{job_id}/events")
 async def job_events(job_id: str):
@@ -2603,7 +2588,6 @@ async def job_events(job_id: str):
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})
 
-
 @app.get("/api/jobs/{job_id}/result")
 def job_result(job_id: str):
     job = JOBS.get(job_id)
@@ -2612,7 +2596,6 @@ def job_result(job_id: str):
     if not job.done.is_set():
         raise HTTPException(409, "job still running")
     return {"status": job.status, "stats": job.stats, "error": job.error, "pins": job.pins}
-
 
 @app.post("/api/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
@@ -2625,7 +2608,6 @@ def cancel_job(job_id: str):
     job.emit(event="done", status="cancelled", total=len(job.pins), stats=job.stats)
     return {"ok": True}
 
-
 @app.get("/api/jobs/{job_id}/images/{name}")
 def job_image(job_id: str, name: str):
     job = JOBS.get(job_id)
@@ -2635,7 +2617,6 @@ def job_image(job_id: str, name: str):
     if not str(path).startswith(str(job.out_dir.resolve())) or not path.is_file():
         raise HTTPException(404, "not found")
     return FileResponse(path)
-
 
 @app.get("/api/jobs/{job_id}/export/{fmt}")
 def export_job(job_id: str, fmt: str):
@@ -2650,12 +2631,10 @@ def export_job(job_id: str, fmt: str):
         return _xlsx_response(job.pins)
     raise HTTPException(400, "format must be zip or xlsx")
 
-
 _SUGGEST_TTL = 300
 _suggest_cache: dict[str, tuple[float, list[dict]]] = {}
 _suggest_locks: dict[str, threading.Lock] = {}
 _suggest_locks_guard = threading.Lock()
-
 
 @app.get("/api/suggest")
 def suggest(q: str = ""):
@@ -2685,7 +2664,6 @@ def suggest(q: str = ""):
                 _suggest_cache.pop(k, None)
         return {"suggestions": out}
 
-
 @app.get("/api/images/{name}")
 def global_image(name: str):
     img_dir = (_out_dir() / "images").resolve()
@@ -2693,7 +2671,6 @@ def global_image(name: str):
     if not path.is_relative_to(img_dir) or not path.is_file():
         raise HTTPException(404, "not found")
     return FileResponse(path)
-
 
 @app.get("/api/gallery")
 def get_gallery():
@@ -2739,7 +2716,6 @@ def get_gallery():
         gallery_pins.append(p)
     return {"pins": gallery_pins, "total": len(gallery_pins)}
 
-
 @app.get("/api/gallery/export/zip")
 def export_gallery():
     img_dir = (_out_dir() / "images").resolve()
@@ -2750,7 +2726,6 @@ def export_gallery():
         if img_dir.exists() else []
     )
     return _zip_response(pins)
-
 
 def _zip_response(pins: list[dict]) -> StreamingResponse:
     buf = io.BytesIO()
@@ -2763,7 +2738,6 @@ def _zip_response(pins: list[dict]) -> StreamingResponse:
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip",
                              headers={"Content-Disposition": 'attachment; filename="pins-images.zip"'})
-
 
 def _xlsx_response(pins: list[dict]) -> StreamingResponse:
     try:
@@ -2789,9 +2763,7 @@ def _xlsx_response(pins: list[dict]) -> StreamingResponse:
         headers={"Content-Disposition": 'attachment; filename="pins.xlsx"'},
     )
 
-
 _visual_cache: dict[str, tuple[float, list[dict]]] = {}
-
 
 @app.get("/api/visual-search")
 def visual_search(pin_id: str = "", limit: int = 25):
@@ -2809,9 +2781,7 @@ def visual_search(pin_id: str = "", limit: int = 25):
     _visual_cache[pin_id] = (time.monotonic(), pins)
     return {"pins": pins}
 
-
 SCHEDULES_FILE = _out_dir() / "schedules.json"
-
 
 def _load_schedules() -> list[dict]:
     if SCHEDULES_FILE.exists():
@@ -2821,11 +2791,9 @@ def _load_schedules() -> list[dict]:
             return []
     return []
 
-
 def _save_schedules(items: list[dict]) -> None:
     SCHEDULES_FILE.parent.mkdir(parents=True, exist_ok=True)
     SCHEDULES_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
-
 
 class ScheduleIn(BaseModel):
     mode: str = Field(default="search", pattern="^(search|board)$")
@@ -2833,11 +2801,9 @@ class ScheduleIn(BaseModel):
     interval_hours: float = Field(default=24, ge=1, le=720)
     limit: int = Field(default=25, ge=1, le=200)
 
-
 @app.get("/api/schedules")
 def list_schedules():
     return {"schedules": _load_schedules()}
-
 
 @app.post("/api/schedules")
 def add_schedule(sch: ScheduleIn):
@@ -2857,13 +2823,11 @@ def add_schedule(sch: ScheduleIn):
     _save_schedules(items)
     return entry
 
-
 @app.delete("/api/schedules/{sid}")
 def delete_schedule(sid: str):
     items = [s for s in _load_schedules() if s.get("id") != sid]
     _save_schedules(items)
     return {"ok": True, "remaining": len(items)}
-
 
 def _scheduler_loop():
     while True:
@@ -2891,16 +2855,13 @@ def _scheduler_loop():
             pass
         time.sleep(60)
 
-
 @app.on_event("startup")
 def _start_scheduler():
     threading.Thread(target=_scheduler_loop, daemon=True).start()
 
-
 class DeleteImagesIn(BaseModel):
     names: list[str] = Field(default_factory=list)
     all: bool = False
-
 
 @app.post("/api/images/delete")
 def delete_images(payload: DeleteImagesIn):
@@ -2922,12 +2883,10 @@ def delete_images(payload: DeleteImagesIn):
             pass
     return {"deleted": deleted}
 
-
 def main():
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
-
 
 if __name__ == "__main__":
     main()

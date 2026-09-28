@@ -12,7 +12,6 @@ import requests
 from .config import BASE
 from .http import _pick_proxies, browser_headers
 
-
 def download_image(
     session: requests.Session,
     pin: dict,
@@ -58,7 +57,6 @@ def download_image(
                 pass
             time.sleep(1.5 * attempt)
     return ""
-
 
 def download_all(
     session: requests.Session,

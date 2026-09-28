@@ -9,7 +9,6 @@ import requests
 
 from .config import ACCEPT_LANGS, BASE, REFERERS, USER_AGENTS
 
-
 def browser_headers(referer: str | None = None) -> dict:
     h = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -21,10 +20,8 @@ def browser_headers(referer: str | None = None) -> dict:
         h["Referer"] = random.choice(REFERERS)
     return h
 
-
 def polite_sleep(base: float, jitter: float = 0.5) -> None:
     time.sleep(max(0.0, base + random.uniform(0, jitter)))
-
 
 def build_session(proxy_pool: list[str] | None = None) -> requests.Session:
     s = requests.Session()
@@ -49,14 +46,12 @@ def build_session(proxy_pool: list[str] | None = None) -> requests.Session:
         pass
     return s
 
-
 def _pick_proxies(session: requests.Session) -> dict | None:
     pool = getattr(session, "proxies_pool", [])
     if pool:
         p = random.choice(pool)
         return {"http": p, "https": p}
     return None
-
 
 def api_get(
     session: requests.Session,
@@ -99,7 +94,6 @@ def api_get(
         print(f"  HTTP {r.status_code} — giving up")
         return None
     return None
-
 
 def api_data(
     session: requests.Session,

@@ -12,7 +12,6 @@ from .config import (
 )
 from .http import api_data, polite_sleep
 
-
 def _dig(obj, *path, default=None):
     cur = obj
     for key in path:
@@ -26,7 +25,6 @@ def _dig(obj, *path, default=None):
             return default
     return cur
 
-
 def _best_image(images: dict) -> tuple[dict | None, dict]:
     if not isinstance(images, dict):
         return None, {}
@@ -35,7 +33,6 @@ def _best_image(images: dict) -> tuple[dict | None, dict]:
         return None, {}
     ranked = sorted(variants.values(), key=lambda v: (v.get("width") or 0))
     return ranked[-1], variants
-
 
 def extract_pin(raw: dict) -> dict | None:
     if not isinstance(raw, dict) or not raw.get("id"):
@@ -104,7 +101,6 @@ def extract_pin(raw: dict) -> dict | None:
         "local_file": "",
     }
 
-
 def search_pins(
     session: requests.Session,
     query: str,
@@ -152,12 +148,10 @@ def search_pins(
         save_cb(pins)
     return pins[:limit]
 
-
 def get_pin_details(session: requests.Session, pin_id: str) -> dict | None:
     options = {"id": pin_id, "field_set_key": "detailed", "fetch_visual_search_objects": False}
     data, _ = api_data(session, PIN_URL, options, f"/pin/{pin_id}/", handler="www/pin/[id].js")
     return data if isinstance(data, dict) else None
-
 
 def enrich_pin(session: requests.Session, pin: dict) -> dict | None:
     raw = get_pin_details(session, pin["pin_id"])
@@ -168,7 +162,6 @@ def enrich_pin(session: requests.Session, pin: dict) -> dict | None:
         fresh["local_file"] = pin.get("local_file", "")
         return fresh
     return None
-
 
 def enrich_with_details(
     session: requests.Session,
@@ -194,7 +187,6 @@ def enrich_with_details(
             if progress_cb:
                 progress_cb(i + 1)
             polite_sleep(delay / max(1, workers), jitter)
-
 
 def board_pins(
     session: requests.Session,
@@ -258,7 +250,6 @@ def board_pins(
         save_cb(pins)
     return pins[:limit]
 
-
 def typeahead_suggestions(session: requests.Session, term: str) -> list[dict]:
     term = term.strip()
     if not term:
@@ -300,7 +291,6 @@ def typeahead_suggestions(session: requests.Session, term: str) -> list[dict]:
             if isinstance(item, dict):
                 add(item)
     return out[:10]
-
 
 def related_pins(session: requests.Session, pin_id: str, limit: int = 25) -> list[dict]:
     options = {"pin_id": pin_id, "page_size": max(limit, 25)}

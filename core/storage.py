@@ -6,7 +6,6 @@ from pathlib import Path
 
 from .config import CSV_COLUMNS
 
-
 def save_outputs(pins: list[dict], out_dir: Path, stem: str) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / f"{stem}.json"

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 class DedupeStore:
     def __init__(self, path: Path, enabled: bool = True, scan_dir: Path | None = None):
         self.path = path
